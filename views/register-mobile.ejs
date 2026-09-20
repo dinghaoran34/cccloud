@@ -1,0 +1,88 @@
+<%- include('partials/header-mobile') %>
+
+<div class="auth-container">
+  <div class="auth-card">
+    <h1>创建账户</h1>
+    <p class="auth-subtitle">加入CC网盘，开启高效协作</p>
+
+    <% if (error) { %>
+      <div class="alert alert-error">
+        <span class="alert-icon"><img src="/icons/warning.svg" width="16" height="16" alt=""></span><span><%= error %></span>
+      </div>
+    <% } %>
+
+    <form id="registerForm" action="/register" method="POST" class="auth-form">
+      <div class="form-group">
+        <label for="username">用户名</label>
+        <input type="text" id="username" name="username" required placeholder="至少3位字符" minlength="3">
+      </div>
+
+      <div class="form-group">
+        <label for="password">密码</label>
+        <input type="password" id="password" name="password" required placeholder="至少6位字符" minlength="6">
+      </div>
+
+      <div class="form-group">
+        <label for="confirmPassword">确认密码</label>
+        <input type="password" id="confirmPassword" name="confirmPassword" required placeholder="再次输入密码" minlength="6">
+      </div>
+
+      <div id="captcha-box" style="margin-bottom: 16px;"></div>
+      <input type="hidden" name="lot_number" id="lot_number">
+      <input type="hidden" name="captcha_output" id="captcha_output">
+      <input type="hidden" name="pass_token" id="pass_token">
+      <input type="hidden" name="gen_time" id="gen_time">
+
+      <button type="button" id="registerBtn" class="btn btn-primary btn-block">注册账户</button>
+    </form>
+
+    <div class="auth-footer">
+      <p>已有账户？ <a href="/login">立即登录</a></p>
+    </div>
+  </div>
+</div>
+
+<script src="https://static.geetest.com/v4/gt4.js"></script>
+<script>
+(function() {
+  var form = document.getElementById('registerForm');
+  var btn = document.getElementById('registerBtn');
+
+  // ===== 极验第四代（bind 模式）；SDK 加载失败时降级直提（与兼容版一致，覆盖老安卓 WebView） =====
+  var captchaObj = null;
+  var geetestLoaded = (typeof initGeetest4 === 'function');
+  if (geetestLoaded) {
+    initGeetest4({
+      captchaId: '<%= captchaId %>',
+      product: 'bind',
+      language: 'zho',
+      protocol: 'https://'
+    }, function(captcha) {
+      captchaObj = captcha;
+      captcha.onSuccess(function() {
+        var result = captchaObj.getValidate();
+        if (!result) { window.mbToast('请先完成验证', 'err'); return; }
+        document.getElementById('lot_number').value = result.lot_number;
+        document.getElementById('captcha_output').value = result.captcha_output;
+        document.getElementById('pass_token').value = result.pass_token;
+        document.getElementById('gen_time').value = result.gen_time;
+        form.submit();
+      }).onError(function() {
+        window.mbToast('验证码异常，请刷新重试', 'err');
+      });
+    });
+  }
+
+  btn.addEventListener('click', function() {
+    if (captchaObj) {
+      captchaObj.showCaptcha();
+    } else if (!geetestLoaded) {
+      form.submit(); // 降级：极验SDK不可用（如老安卓 WebView），由服务器跳过验证
+    } else {
+      window.mbToast('验证码正在加载中，请稍后重试', 'err');
+    }
+  });
+})();
+</script>
+
+<%- include('partials/footer-mobile') %>

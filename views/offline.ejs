@@ -1,0 +1,235 @@
+<%- include('partials/cr-shell-head', { crActive: 'offline' }) %>
+  <header class="cr-topbar">
+    <button type="button" class="cr-hamburger" data-cr-drawer-open title="打开菜单" aria-label="打开菜单">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M4.6 5.6h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 10.5h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 15.4h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3z"/></svg>
+    </button>
+    <nav class="cr-crumb" aria-label="面包屑">
+      <a class="cr-crumb-item" href="/dashboard">文件</a>
+      <span class="cr-crumb-sep">/</span>
+      <span class="cr-crumb-item is-current">离线下载</span>
+    </nav>
+    <div class="cr-top-actions">
+      <form class="cr-search" action="/search" method="GET" role="search">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M4.8 10.8a6 6 0 1 0 12 0a6 6 0 1 0-12 0zM6.9 10.8a3.9 3.9 0 1 0 7.8 0a3.9 3.9 0 1 0-7.8 0z"/><path d="M19.26 14.74L19.26 14.74A1.2 1.2 0 0 1 19.26 16.43L16.43 19.26A1.2 1.2 0 0 1 14.74 19.26L14.74 19.26A1.2 1.2 0 0 1 14.74 17.57L17.57 14.74A1.2 1.2 0 0 1 19.26 14.74Z"/></svg>
+        <input type="search" name="q" placeholder="搜索文件…" autocomplete="off" aria-label="搜索文件">
+      </form>
+      <%- include('partials/cr-theme-btn') %>
+      <%- include('partials/cr-user-menu') %>
+    </div>
+  </header>
+
+  <div class="cr-content">
+    <div id="alert"></div>
+    <div id="aria2Notice"></div>
+
+    <div class="cr-toolbar">
+      <span class="cr-toolbar-sub" id="count">离线下载</span>
+      <span class="cr-spring"></span>
+      <button type="button" class="cr-btn cr-btn-primary" id="newBtn">新建任务</button>
+    </div>
+
+    <div class="cr-card" id="list"></div>
+  </div>
+
+<!-- ==================== 新建任务弹窗 ==================== -->
+<div id="newModal" class="cr-modal-mask" style="display:none; z-index:10000">
+  <div class="cr-modal" style="width:520px">
+    <h3 class="cr-modal-title"><img src="/icons/download.svg" width="18" height="18" alt="">新建离线下载任务</h3>
+    <div class="cr-field">
+      <label class="cr-hint" for="newUrl">下载链接（HTTP / HTTPS 直链，或 magnet: 磁力链接）</label>
+      <input class="cr-input" id="newUrl" type="text" placeholder="https://example.com/file.zip" autocomplete="off" spellcheck="false">
+    </div>
+    <p class="cr-hint" id="magnetHint"></p>
+    <div class="cr-modal-btns">
+      <button type="button" class="cr-btn cr-btn-ghost" id="newCancel">取消</button>
+      <button type="button" class="cr-btn cr-btn-primary" id="newSubmit">开始下载</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 通用确认弹窗 ==================== -->
+<div id="confirmModal" class="cr-modal-mask" style="display:none; z-index:10001">
+  <div class="cr-modal" style="width:420px">
+    <h3 class="cr-modal-title" id="confirmTitle">确认操作</h3>
+    <p class="cr-hint" id="confirmMsg" style="white-space:pre-wrap;"></p>
+    <div class="cr-modal-btns">
+      <button type="button" class="cr-btn cr-btn-ghost" id="confirmCancel">取消</button>
+      <button type="button" class="cr-btn cr-btn-primary" id="confirmOk">确定</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 提示弹窗 ==================== -->
+<div id="infoModal" class="cr-modal-mask" style="display:none; z-index:10002">
+  <div class="cr-modal" style="width:460px">
+    <h3 class="cr-modal-title" id="infoTitle">提示</h3>
+    <p class="cr-hint" id="infoMsg" style="white-space:pre-wrap;"></p>
+    <div class="cr-modal-btns">
+      <button type="button" class="cr-btn cr-btn-primary" id="infoOk">知道了</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var timer = null, aria2 = null;
+
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+  function say(t, ok){
+    var a = $('alert');
+    a.innerHTML = '';
+    if (t) { a.className = 'cr-alert ' + (ok ? 'cr-alert-success' : 'cr-alert-error'); a.textContent = t; }
+    else { a.className = ''; }
+  }
+  function info(title, msg){
+    $('infoTitle').textContent = title || '提示';
+    $('infoMsg').textContent = msg || '';
+    $('infoModal').style.display = 'flex';
+  }
+  function confirmBox(title, msg, onOk){
+    $('confirmTitle').textContent = title || '确认操作';
+    $('confirmMsg').textContent = msg || '';
+    $('confirmModal').style.display = 'flex';
+    $('confirmOk').onclick = function(){ $('confirmModal').style.display = 'none'; if (onOk) onOk(); };
+  }
+  $('confirmCancel').onclick = function(){ $('confirmModal').style.display = 'none'; };
+  $('infoOk').onclick = function(){ $('infoModal').style.display = 'none'; };
+  $('newCancel').onclick = function(){ $('newModal').style.display = 'none'; };
+
+  var STATUS = {
+    queued:   { text: '排队中', cls: 'cr-tag-muted' },
+    running:  { text: '下载中', cls: 'cr-tag-primary' },
+    paused:   { text: '已暂停', cls: 'cr-tag-muted' },
+    done:     { text: '已完成', cls: 'cr-tag-success' },
+    error:    { text: '失败',   cls: 'cr-tag-danger' },
+    canceled: { text: '已取消', cls: 'cr-tag-muted' }
+  };
+
+  function emptyBox(text){
+    return '<div class="cr-empty"><img src="/icons/empty.svg" width="56" height="56" alt=""><p>' + esc(text) + '</p></div>';
+  }
+
+  function renderAria2(){
+    var box = $('aria2Notice');
+    if (!aria2) { box.innerHTML = ''; return; }
+    if (aria2.available) {
+      box.innerHTML = '<div class="cr-alert cr-alert-success" style="margin-bottom:12px;">'
+        + '已检测到 Aria2 服务（' + esc(aria2.url) + '）：磁力 / 种子任务将交由 Aria2 下载。</div>';
+    } else {
+      box.innerHTML = '<div class="cr-alert" style="margin-bottom:12px;display:block;">'
+        + '<strong>磁力 / 种子需要部署 Aria2（未检测到 ' + esc(aria2.url) + '）</strong><br>'
+        + '配置方法：部署 Aria2 并开启 RPC（<code>aria2c --enable-rpc --rpc-listen-all=false --rpc-listen-port=6800</code>），'
+        + '然后设置环境变量 <code>ARIA2_RPC_URL</code>（默认 http://127.0.0.1:6800/jsonrpc）与可选 <code>ARIA2_RPC_SECRET</code>，重启本服务即可。'
+        + '当前磁力入口保留但不可用，直链（HTTP/HTTPS）下载不受影响。</div>';
+    }
+  }
+
+  function rowHtml(t){
+    var st = STATUS[t.status] || { text: t.status, cls: 'cr-tag-muted' };
+    var src = t.source === 'aria2' ? '磁力/Aria2' : '直链';
+    var sizeText = t.totalBytes > 0 ? t.totalText : t.doneText;
+    var pct = t.percent;
+    var barCls = t.status === 'error' ? ' progress-error' : '';
+    var progress = '<div class="progress-track" title="' + pct + '%"><div class="progress-bar' + barCls + '" style="width:' + pct + '%"></div></div>'
+      + '<div class="cr-hint" style="margin-top:4px;">' + pct + '% · ' + esc(t.doneText) + (t.totalBytes > 0 ? ' / ' + esc(t.totalText) : '')
+      + (t.speed > 0 ? ' · ' + esc(t.speedText) : '') + '</div>';
+    var ops = '';
+    var btn = function(act, label, cls){ return '<button type="button" class="cr-btn cr-btn-sm ' + (cls || 'cr-btn-ghost') + '" data-act="' + act + '" data-id="' + t.id + '">' + label + '</button>'; };
+    if (t.status === 'running' || t.status === 'queued') { ops += btn('pause', '暂停'); ops += btn('cancel', '取消'); }
+    if (t.status === 'paused') { ops += btn('resume', '继续'); ops += btn('cancel', '取消'); ops += btn('delete', '删除', 'cr-btn-danger'); }
+    if (t.status === 'error' || t.status === 'canceled') { ops += btn('retry', '重试'); ops += btn('delete', '删除', 'cr-btn-danger'); }
+    if (t.status === 'done') {
+      if (t.resultFileId) ops += '<a class="cr-btn cr-btn-ghost cr-btn-sm" href="/download/' + t.resultFileId + '">下载</a>';
+      ops += btn('delete', '删除', 'cr-btn-danger');
+    }
+    var errHtml = t.error ? '<div class="cr-hint" style="color:var(--cr-danger);margin-top:4px;">' + esc(t.error) + '</div>' : '';
+    return '<tr>'
+      + '<td><div class="cr-name"><span class="cr-fi cr-fi--other"><img src="/icons/download.svg" width="20" height="20" alt=""></span>'
+      + '<span class="cr-name-text" title="' + esc(t.url) + '">' + esc(t.filename) + '</span></div>'
+      + '<div class="cr-hint" style="word-break:break-all;">' + esc(t.url.length > 90 ? t.url.slice(0, 90) + '…' : t.url) + '</div>' + errHtml + '</td>'
+      + '<td class="cr-col-size">' + esc(src) + '<div class="cr-hint">' + esc(sizeText) + '</div></td>'
+      + '<td style="min-width:180px;">' + progress + '</td>'
+      + '<td class="cr-col-size"><span class="cr-tag ' + st.cls + '">' + esc(st.text) + '</span></td>'
+      + '<td class="cr-col-ops"><div class="cr-row-ops">' + ops + '</div></td>'
+      + '</tr>';
+  }
+
+  function render(tasks){
+    var c = $('list');
+    $('count').textContent = '离线下载（共 ' + tasks.length + ' 个任务）';
+    if (!tasks.length) { c.innerHTML = emptyBox('暂无离线下载任务，点击右上角「新建任务」开始'); return; }
+    c.innerHTML = '<div class="cr-table-scroll"><table class="cr-table"><thead><tr>'
+      + '<th>名称</th><th class="cr-col-size">来源/大小</th><th>进度</th><th class="cr-col-size">状态</th><th class="cr-col-ops">操作</th>'
+      + '</tr></thead><tbody>' + tasks.map(rowHtml).join('') + '</tbody></table></div>';
+  }
+
+  function load(){
+    var x = new XMLHttpRequest();
+    x.open('GET', '/api/offline/list');
+    x.onload = function(){
+      var j = null; try { j = JSON.parse(x.responseText); } catch(e) {}
+      if (!j || !j.ok) { render([]); say((j && j.error) || '任务列表加载失败'); return; }
+      aria2 = j.aria2 || null;
+      renderAria2();
+      render(j.tasks || []);
+    };
+    x.onerror = function(){ say('网络错误，请稍后重试'); };
+    x.send();
+  }
+
+  function post(url, body, onOk){
+    var x = new XMLHttpRequest();
+    x.open('POST', url);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.onload = function(){
+      var j = null; try { j = JSON.parse(x.responseText); } catch(e) {}
+      if (j && j.ok) { say(''); if (onOk) onOk(j); load(); }
+      else { info('操作失败', (j && j.error) || '操作失败，请稍后重试'); }
+    };
+    x.onerror = function(){ info('网络错误', '请求失败，请稍后重试'); };
+    x.send(JSON.stringify(body || {}));
+  }
+
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest ? e.target.closest('[data-act]') : null;
+    if (!btn) return;
+    var id = Number(btn.dataset.id);
+    var act = btn.dataset.act;
+    if (act === 'pause') post('/api/offline/pause', { id: id });
+    else if (act === 'resume') post('/api/offline/resume', { id: id });
+    else if (act === 'retry') post('/api/offline/retry', { id: id });
+    else if (act === 'cancel') confirmBox('取消任务', '确定取消该离线下载任务？已下载的临时分片将被删除。', function(){ post('/api/offline/cancel', { id: id }); });
+    else if (act === 'delete') confirmBox('删除记录', '确定删除该任务记录？该操作不会删除已保存到网盘的文件。', function(){ post('/api/offline/delete', { id: id }); });
+  });
+
+  $('newBtn').onclick = function(){
+    $('newUrl').value = '';
+    $('magnetHint').textContent = (aria2 && aria2.available)
+      ? '已检测到 Aria2：磁力 / 种子链接可直接提交。'
+      : ('当前未检测到 Aria2（' + ((aria2 && aria2.url) || 'http://127.0.0.1:6800/jsonrpc') + '）：磁力 / 种子提交会被拒绝，请先部署 Aria2。直链不受影响。');
+    $('newModal').style.display = 'flex';
+    setTimeout(function(){ try { $('newUrl').focus(); } catch(e){} }, 30);
+  };
+
+  $('newSubmit').onclick = function(){
+    var url = String($('newUrl').value || '').trim();
+    if (!url) { info('参数不完整', '请填写下载链接'); return; }
+    if (/^(?!https?:|magnet:)/i.test(url)) { info('链接不合法', '仅支持 http/https 直链或 magnet: 磁力链接'); return; }
+    if (/^magnet:/i.test(url) && aria2 && !aria2.available) {
+      info('磁力/种子需要部署 Aria2', '未检测到 ' + aria2.url + '。\n请部署 Aria2 并开启 RPC，配置环境变量 ARIA2_RPC_URL / ARIA2_RPC_SECRET 后重启服务。');
+      return;
+    }
+    post('/api/offline/create', { url: url }, function(){ $('newModal').style.display = 'none'; });
+  };
+
+  load();
+  timer = setInterval(function(){ if (!document.hidden) load(); }, 2000);
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) load(); });
+})();
+</script>
+<%- include('partials/cr-shell-foot') %>

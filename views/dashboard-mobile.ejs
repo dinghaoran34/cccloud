@@ -1,0 +1,745 @@
+<%
+function formatFileSize(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+  return (bytes / 1073741824).toFixed(1) + ' GB';
+}
+
+function fileIconPath(filename) {
+  var ext = filename.split('.').pop().toLowerCase();
+  var types = {
+    pdf: 'pdf', doc: 'doc', docx: 'doc',
+    xls: 'xls', xlsx: 'xls',
+    ppt: 'ppt', pptx: 'ppt',
+    jpg: 'img', jpeg: 'img', png: 'img', gif: 'img', bmp: 'img', webp: 'img', svg: 'img',
+    mp3: 'audio', wav: 'audio', flac: 'audio', m4a: 'audio', ogg: 'audio',
+    mp4: 'video', avi: 'video', mkv: 'video', mov: 'video', wmv: 'video', webm: 'video',
+    zip: 'archive', rar: 'archive', '7z': 'archive', tar: 'archive', gz: 'archive',
+    txt: 'text', md: 'text', log: 'text',
+    js: 'code', html: 'code', css: 'code', py: 'code', json: 'code', ts: 'code', java: 'code',
+    exe: 'exe', msi: 'exe', bat: 'exe', apk: 'exe'
+  };
+  return '/icons/file-' + (types[ext] || 'generic') + '.svg';
+}
+
+/* 彩色类型图标底色类名（对应 style-mobile.css 的 .mb-ico--*，使用 --cr-tint-* 令牌） */
+function fileTintClass(filename) {
+  var key = fileIconPath(filename).replace('/icons/file-', '').replace('.svg', '');
+  var map = {
+    pdf: 'doc', doc: 'doc', xls: 'doc', ppt: 'doc', text: 'doc', code: 'doc',
+    img: 'image', video: 'video', archive: 'archive'
+  };
+  return 'mb-ico--' + (map[key] || 'other');
+}
+%>
+<%- include('partials/header-mobile') %>
+<script>document.body.classList.add('app-top');</script>
+
+<section id="mbp-home" class="mb-pane">
+<!-- 网盘容量进度条 -->
+<% var usedPct = Math.min(100, Math.round(usage.used / usage.quota * 1000) / 10); %>
+<% var barColor = usedPct >= 95 ? 'var(--cr-danger)' : (usedPct >= 80 ? 'var(--cr-warning)' : 'var(--cr-primary)'); %>
+<div class="usage-card">
+  <div class="usage-head">
+    <span class="usage-title"><img src="/icons/storage.svg" width="16" height="16" alt=""> 网盘容量</span>
+    <span class="usage-text">已用 <b><%= formatFileSize(usage.used) %></b> / <%= formatFileSize(usage.quota) %>（<%= usedPct %>%）</span>
+  </div>
+  <div class="progress-track usage-track">
+    <div class="progress-bar" style="width: <%= usedPct %>% ; background: <%= barColor %>;"></div>
+  </div>
+  <% if (usedPct >= 95) { %>
+    <p class="usage-warn"><img src="/icons/warning.svg" width="16" height="16" alt=""> 容量即将用尽，请及时清理文件</p>
+  <% } %>
+</div>
+<% if (typeof uploadError !== 'undefined' && uploadError) { %>
+  <div class="alert alert-error">
+    <span class="alert-icon"><img src="/icons/warning.svg" width="18" height="18" alt=""></span>
+    <span><%= uploadError %></span>
+  </div>
+<% } %>
+
+<!-- 快捷操作(双卡) -->
+<div class="mb-quick">
+  <button type="button" class="mb-qcard" data-goto="files">
+    <span class="mb-qico"><img src="/icons/upload.svg" width="24" height="24" alt=""></span>
+    <b>上传文件</b>
+    <i>保存到我的网盘</i>
+  </button>
+</div>
+
+<!-- 最近文件 -->
+<div class="mb-recent">
+  <div class="mb-recent-head">
+    <span>📁 文件</span>
+    <button type="button" class="mb-more" data-goto="files">查看全部 &rsaquo;</button>
+  </div>
+  <% if (personalFiles.length === 0) { %>
+    <div class="mb-recent-empty">
+      <span class="mb-recent-empty-ico"><img src="/icons/empty.svg" width="24" height="24" alt=""></span>
+      <p>暂无内容</p>
+      <span class="mb-dim" style="display:block; font-size:13px; margin-top:4px;">上传文件或新建文件夹后会显示在这里</span>
+      <button type="button" class="btn btn-primary" data-goto="files">上传文件</button>
+    </div>
+  <% } else { %>
+    <% personalFiles.slice(0, 5).forEach(function(file) { %>
+      <a class="mb-recent-item" href="/download/<%= file.id %>">
+        <span class="mb-r-ico <%= fileTintClass(file.filename) %>"><img src="<%= fileIconPath(file.filename) %>" width="20" height="20" alt=""></span>
+        <span class="mb-r-info"><b><%= file.filename %></b><i><%= formatFileSize(file.file_size) %> · <%= new Date(file.uploaded_at).toLocaleDateString('zh-CN') %></i></span>
+        <span class="mb-r-arrow">&rsaquo;</span>
+      </a>
+    <% }) %>
+  <% } %>
+</div>
+</section>
+<section id="mbp-files" class="mb-pane" hidden>
+<!-- 上传区 -->
+<div class="card">
+  <div class="card-header">
+    <h2><img src="/icons/upload.svg" width="18" height="18" alt=""> 上传文件</h2>
+  </div>
+  <div class="card-body">
+    <form action="/upload" method="POST" enctype="multipart/form-data" class="upload-form">
+      <div class="upload-options">
+        <label class="radio-label">
+          <input type="radio" name="share" value="false" checked>
+          <span>个人</span>
+        </label>
+      </div>
+      <input type="hidden" name="folderId" value="<%= currentFolderId || '' %>">
+      <div class="file-input-wrapper">
+        <input type="file" name="file" id="fileInput" required>
+        <label for="fileInput" class="file-input-label">
+          <img src="/icons/folder.svg" width="16" height="16" alt=""><span id="fileLabel">选择文件</span>
+          <span class="file-hint">最大1GB</span>
+        </label>
+      </div>
+      <div class="upload-progress" style="display:none;">
+        <div class="progress-track"><div class="progress-bar"></div></div>
+        <div class="progress-info">
+          <span class="progress-pct">0%</span>
+          <span class="progress-speed">--</span>
+          <span class="progress-eta"></span>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">上传</button>
+    </form>
+  </div>
+</div>
+
+<!-- 个人文件 -->
+<div class="card">
+  <div class="card-header">
+    <!-- 面包屑导航 -->
+    <h2>
+      <a href="/dashboard" style="color:inherit;text-decoration:none;"><img src="/icons/folder.svg" width="16" height="16" alt=""> 全部文件</a>
+      <% folderPath.forEach(function(f) { %>
+        <span style="color:var(--cr-muted);">›</span>
+        <% if (f.id === currentFolderId) { %>
+          <span style="color:var(--cr-primary);"><%= f.name %></span>
+        <% } else { %>
+          <a href="/dashboard?folder=<%= f.id %>" style="color:inherit;text-decoration:none;"><%= f.name %></a>
+        <% } %>
+      <% }) %>
+    </h2>
+    <span class="badge"><%= folders.length + personalFiles.length %></span>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <!-- 新建文件夹 -->
+    <form action="/folder/create" method="POST" style="display:flex;gap:8px;padding:12px;border-bottom:1px solid var(--cr-border);">
+      <input type="hidden" name="parentId" value="<%= currentFolderId || '' %>">
+      <input type="text" name="name" placeholder="新建文件夹名称" required maxlength="60" style="flex:1;min-width:0;padding:8px 12px;border:1px solid var(--cr-border);border-radius:var(--cr-radius);font-size:15px;">
+      <button type="submit" class="btn btn-primary btn-sm" style="white-space:nowrap;"><img src="/icons/folder.svg" width="16" height="16" alt=""> 新建</button>
+    </form>
+    <% if (folders.length === 0 && personalFiles.length === 0) { %>
+      <div class="empty-state">
+        <div class="empty-icon"><img src="/icons/empty.svg" width="24" height="24" alt=""></div>
+        <p>暂无内容</p>
+        <span class="empty-desc">新建一个文件夹或上传文件吧</span>
+        <button type="button" class="btn btn-primary" onclick="document.getElementById('fileInput').click()">上传文件</button>
+      </div>
+    <% } else { %>
+      <% folders.forEach(function(f) { %>
+        <div class="file-item">
+          <span class="file-icon mb-ico--folder"><img src="/icons/folder.svg" width="20" height="20" alt=""></span>
+          <div class="file-info">
+            <a href="/dashboard?folder=<%= f.id %>" style="color:inherit;text-decoration:none;display:block;"><%= f.name %></a>
+            <div class="file-meta">文件夹</div>
+          </div>
+          <div class="file-actions">
+            <button type="button" class="fm-btn" title="更多操作" data-kind="folder" data-fid="<%= f.id %>" data-name="<%= f.name %>" onclick="openFileMenu(this)">⋯</button>
+          </div>
+        </div>
+      <% }) %>
+      <% personalFiles.forEach(function(file) { %>
+        <div class="file-item">
+          <span class="file-icon <%= fileTintClass(file.filename) %>"><img src="<%= fileIconPath(file.filename) %>" width="20" height="20" alt=""></span>
+          <div class="file-info">
+            <div class="file-name"><%= file.filename %></div>
+            <div class="file-meta"><%= formatFileSize(file.file_size) %> · <%= new Date(file.uploaded_at).toLocaleDateString('zh-CN') %></div>
+          </div>
+          <div class="file-actions">
+            <button type="button" class="fm-btn" title="更多操作" data-kind="file" data-fid="<%= file.id %>" data-name="<%= file.filename %>" data-team="" data-canshare="1" onclick="openFileMenu(this)">⋯</button>
+          </div>
+        </div>
+      <% }) %>
+    <% } %>
+  </div>
+</div>
+
+</section>
+
+<section id="mbp-team" class="mb-pane" hidden>
+<div class="card">
+  <div class="card-header">
+    <h2><img src="/icons/users.svg" width="18" height="18" alt=""> 团队空间</h2>
+    <span class="badge">UID:<%= currentUser.uid %></span>
+  </div>
+  <div class="card-body">
+    <% if (typeof teamSuccess !== 'undefined' && teamSuccess) { %>
+      <div class="alert alert-success"><span><img src="/icons/check.svg" width="16" height="16" alt=""></span><span><%= teamSuccess %></span></div>
+    <% } %>
+    <% if (typeof teamError !== 'undefined' && teamError) { %>
+      <div class="alert alert-error"><span><img src="/icons/warning.svg" width="16" height="16" alt=""></span><span><%= teamError %></span></div>
+    <% } %>
+
+    <% if (!hasTeam) { %>
+      <p style="color:var(--cr-text-2); font-size:13px; margin-bottom:12px;">您还未加入任何团队。创建团队或输入团队长UID加入。</p>
+
+      <h3 style="font-size:17px; margin-bottom:8px;"><img src="/icons/plus.svg" width="16" height="16" alt=""> 创建团队</h3>
+      <form action="/team/create" method="POST" style="margin-bottom:16px;">
+        <input type="text" name="name" placeholder="团队名称" required style="width:100%; margin-bottom:8px;">
+        <button type="submit" class="btn btn-primary btn-block">创建团队</button>
+      </form>
+
+      <h3 style="font-size:17px; margin-bottom:8px;"><img src="/icons/key.svg" width="16" height="16" alt=""> 加入团队</h3>
+      <form action="/team/join" method="POST">
+        <input type="text" name="ownerUid" placeholder="团队长的UID" required style="width:100%; margin-bottom:8px; text-transform:uppercase;">
+        <button type="submit" class="btn btn-primary btn-block">加入团队</button>
+      </form>
+    <% } else { %>
+      <% teams.forEach(function(team) { %>
+        <div class="mb-box">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+            <h3 style="margin:0; font-size:17px;"><img src="/icons/folder.svg" width="18" height="18" alt=""> <%= team.name %></h3>
+            <% if (team.isOwner) { %><span class="badge">团队长</span><% } %>
+          </div>
+          <p style="color:var(--cr-text-2); font-size:13px; margin-bottom:12px;">团队长: <%= team.owner_name %> (UID: <%= team.owner_uid %>)</p>
+
+          <form action="/team/<%= team.id %>/upload" method="POST" enctype="multipart/form-data" style="margin-bottom:12px;">
+            <div class="file-input-wrapper" style="margin-bottom: 8px;">
+              <input type="file" name="file" id="teamFileM<%= team.id %>" required>
+              <label for="teamFileM<%= team.id %>" class="file-input-label" style="padding: 12px; flex-direction: row; gap: 8px;">
+                <img src="/icons/folder.svg" width="16" height="16" alt="" style="width:16px;height:16px;margin-bottom:0;"><span class="file-label-text" style="font-size:15px;">选择文件</span>
+                <span class="file-hint" style="font-size:13px; flex-shrink:0;">上传到团队</span>
+              </label>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block btn-sm">上传到团队</button>
+            <div class="upload-progress" style="display:none; margin-top:8px;">
+              <div class="progress-track"><div class="progress-bar"></div></div>
+              <div class="progress-info">
+                <span class="progress-pct">0%</span>
+                <span class="progress-speed">--</span>
+                <span class="progress-eta"></span>
+              </div>
+            </div>
+          </form>
+
+          <% if (team.files.length === 0) { %>
+            <p style="color:var(--cr-text-2); font-size:13px; padding:8px 0;">暂无内容</p>
+          <% } else { %>
+            <% team.files.forEach(function(file) { %>
+              <div class="file-item">
+                <span class="file-icon <%= fileTintClass(file.filename) %>"><img src="<%= fileIconPath(file.filename) %>" width="20" height="20" alt=""></span>
+                <div class="file-info">
+                  <div class="file-name"><%= file.filename %></div>
+                  <div class="file-meta"><%= formatFileSize(file.file_size) %> · <%= file.uploader_name %></div>
+                </div>
+                <div class="file-actions">
+                  <button type="button" class="fm-btn" title="更多操作" data-kind="file" data-fid="<%= file.id %>" data-name="<%= file.filename %>" data-team="<%= team.id %>" data-canshare="<%= file.user_id === currentUser.id ? '1' : '0' %>" onclick="openFileMenu(this)">⋯</button>
+                </div>
+              </div>
+            <% }) %>
+          <% } %>
+
+          <% if (team.isOwner) { %>
+            <div class="mb-sep" style="margin-top:12px; padding-top:12px;">
+              <h4 style="font-size:15px; margin-bottom:8px;"><img src="/icons/users.svg" width="16" height="16" alt=""> 团员管理</h4>
+              <form action="/team/<%= team.id %>/add-member" method="POST" style="display:flex; gap:8px; margin-bottom:12px;">
+                <input type="text" name="targetUid" placeholder="输入UID添加团员" required style="flex:1; min-width:0; padding:8px; border:1px solid var(--cr-border); border-radius:var(--cr-radius); font-size:13px; text-transform:uppercase;">
+                <button type="submit" class="btn btn-primary btn-sm">添加</button>
+              </form>
+              <% team.members.forEach(function(m) { %>
+                <div class="file-item">
+                  <span class="file-icon"><% if (m.uid === team.owner_uid) { %><img src="/icons/crown.svg" width="20" height="20" alt=""><% } else { %><img src="/icons/user.svg" width="20" height="20" alt=""><% } %></span>
+                  <div class="file-info">
+                    <div class="file-name"><%= m.username %><% if (m.uid === team.owner_uid) { %> (团队长)<% } %></div>
+                    <div class="file-meta"><%= m.uid %></div>
+                  </div>
+                  <div class="file-actions">
+                    <% if (m.uid !== team.owner_uid) { %>
+                      <form action="/team/<%= team.id %>/remove-member" method="POST" style="display:inline;" data-mb-confirm="确定移除该团员？" data-mb-confirm-title="移除团员" data-mb-confirm-ok="移除">
+                        <input type="hidden" name="memberUserId" value="<%= m.id %>">
+                        <button type="submit" class="btn btn-sm btn-danger">移除</button>
+                      </form>
+                    <% } %>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+          <% } %>
+
+          <form action="/team/<%= team.id %>/leave" method="POST" style="margin-top:12px;">
+            <button type="submit" class="btn btn-outline btn-block btn-sm">退出团队</button>
+          </form>
+
+          <% if (team.isOwner) { %>
+            <div class="mb-sep-danger" style="margin-top:12px; padding-top:12px;">
+              <p style="color:var(--cr-danger); font-size:13px; margin-bottom:8px;"><img src="/icons/warning.svg" width="16" height="16" alt=""> 解散团队将删除所有团队文件，不可恢复。</p>
+              <button type="button" class="btn btn-danger btn-block btn-sm" onclick="document.getElementById('dissolveFormM<%= team.id %>').style.display='block'">解散团队</button>
+              <div id="dissolveFormM<%= team.id %>" style="display:none; margin-top:8px;">
+                <form action="/team/<%= team.id %>/dissolve" method="POST" data-mb-confirm="解散后所有团队文件将被永久删除，且不可恢复。" data-mb-confirm-title="解散团队" data-mb-confirm-ok="确认解散" data-mb-confirm-danger="1">
+                  <input type="password" name="password" required placeholder="输入账户密码" style="width:100%; margin-bottom:8px; padding:8px; border:1px solid var(--cr-danger); border-radius:var(--cr-radius);">
+                  <button type="submit" class="btn btn-danger btn-block btn-sm">确认解散</button>
+                  <button type="button" class="btn btn-outline btn-block btn-sm" onclick="document.getElementById('dissolveFormM<%= team.id %>').style.display='none'">取消</button>
+                </form>
+              </div>
+            </div>
+          <% } %>
+        </div>
+      <% }) %>
+    <% } %>
+  </div>
+</div>
+
+<!-- 账户管理 -->
+</section>
+<section id="mbp-me" class="mb-pane" hidden>
+<div class="card">
+  <div class="card-header">
+    <h2><img src="/icons/gear.svg" width="18" height="18" alt=""> 账户管理</h2>
+  </div>
+  <div class="card-body">
+    <% if (typeof passwordSuccess !== 'undefined' && passwordSuccess) { %>
+      <div class="alert alert-success"><span><img src="/icons/check.svg" width="16" height="16" alt=""></span><span><%= passwordSuccess %></span></div>
+    <% } %>
+    <% if (typeof passwordError !== 'undefined' && passwordError) { %>
+      <div class="alert alert-error"><span><img src="/icons/warning.svg" width="16" height="16" alt=""></span><span><%= passwordError %></span></div>
+    <% } %>
+    <% if (typeof deleteError !== 'undefined' && deleteError) { %>
+      <div class="alert alert-error"><span><img src="/icons/warning.svg" width="16" height="16" alt=""></span><span><%= deleteError %></span></div>
+    <% } %>
+
+    <div style="margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--cr-border);">
+      <h3 style="margin-bottom:12px; font-size:17px;"><img src="/icons/user.svg" width="16" height="16" alt=""> 个人资料</h3>
+      <div style="display:flex; align-items:center; gap: 12px;">
+        <div style="text-align:center;">
+          <img id="mbProfileAvatar" src="<%= currentUser.avatar ? ('/avatar/' + currentUser.uid) : '/icons/user.svg' %>" alt="头像"
+               style="width:64px;height:64px;border-radius:50%;object-fit:cover;background:var(--cr-hover);border:1px solid var(--cr-border);">
+          <div style="margin-top:8px; font-size:13px;">
+            <label for="mbAvatarInput" style="color:var(--cr-primary);">更换头像</label>
+            <input type="file" id="mbAvatarInput" accept="image/*" style="display:none;">
+          </div>
+        </div>
+        <div style="flex:1;">
+          <p style="color:var(--cr-text-2); font-size:13px; margin-bottom:4px;">登录名：<b class="mb-strong"><%= currentUser.username %></b></p>
+          <p style="color:var(--cr-text-2); font-size:13px; margin-bottom:8px;">团队ID：<b class="mb-strong"><%= currentUser.uid %></b></p>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="mbNicknameInput" maxlength="20" value="<%= currentUser.nickname || currentUser.username %>"
+                   placeholder="昵称（≤20字）" style="flex:1; padding:8px 12px; border:1px solid var(--cr-border); border-radius:var(--cr-radius); font-size:15px;">
+            <button type="button" class="btn btn-primary btn-sm" id="mbSaveNicknameBtn">保存</button>
+          </div>
+        </div>
+      </div>
+      <div id="mbProfileMsg" style="color:var(--cr-success); font-size:13px; margin-top:8px; min-height:16px;"></div>
+    </div>
+
+    <div style="margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--cr-border);">
+      <h3 style="margin-bottom:8px; font-size:17px;"><img src="/icons/lock.svg" width="16" height="16" alt=""> 修改密码</h3>
+      <p style="color:var(--cr-text-2); font-size:13px; margin-bottom:12px;">需验证原密码。</p>
+      <button type="button" class="btn btn-primary btn-block" id="changePasswordBtn">修改密码</button>
+    </div>
+
+    <h3 style="margin-bottom:8px; font-size:17px; color:var(--cr-danger);"><img src="/icons/trash.svg" width="16" height="16" alt=""> 注销账户</h3>
+    <p style="color:var(--cr-text-2); font-size:13px; margin-bottom:12px;">注销账户将永久删除所有文件，不可恢复。</p>
+    <button type="button" class="btn btn-danger btn-block" id="deleteAccountBtn"><img src="/icons/trash.svg" width="16" height="16" alt=""> 注销账户</button>
+  </div>
+</div>
+
+</section>
+
+<!-- 底部导航(123云盘式) -->
+<nav class="mb-tabbar" id="mbTabbar">
+  <button type="button" class="mb-tab active" data-tab="home"><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M11.06 3.05a1.6 1.6 0 0 1 1.88 0l7.24 5.73c.4.32.64.8.64 1.32v8.5A2.4 2.4 0 0 1 18.42 21H5.58A2.4 2.4 0 0 1 3.18 18.6v-8.5c0-.52.24-1 .64-1.32zM12 14.6h0a1.85 1.85 0 0 1 1.85 1.85v1.5a1.85 1.85 0 0 1-1.85 1.85h0a1.85 1.85 0 0 1-1.85-1.85v-1.5a1.85 1.85 0 0 1 1.85-1.85z"/></svg><span>首页</span></button>
+  <button type="button" class="mb-tab" data-tab="files"><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M2.8 7.6A2.8 2.8 0 0 1 5.6 4.8h3.36c.74 0 1.45.29 1.98.8l1.1 1.1h6.36a2.8 2.8 0 0 1 2.8 2.8v7.1a2.8 2.8 0 0 1-2.8 2.8H5.6a2.8 2.8 0 0 1-2.8-2.8z"/></svg><span>文件</span></button>
+  <button type="button" class="mb-tab" data-tab="team"><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path opacity=".45" d="M14.4 8.8a2.8 2.8 0 1 0 5.6 0a2.8 2.8 0 1 0-5.6 0zM17.2 12.8a5.8 5.8 0 0 1 5.8 5.8V21.4H11.4V18.6a5.8 5.8 0 0 1 5.8-5.8z"/><path d="M5.7 8.2a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0zM9.2 13a6.6 6.6 0 0 1 6.6 6.6V21.4H2.6v-1.8A6.6 6.6 0 0 1 9.2 13z"/></svg><span>团队</span></button>
+  <button type="button" class="mb-tab" data-tab="me"><svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M8.2 8a3.8 3.8 0 1 0 7.6 0a3.8 3.8 0 1 0-7.6 0zM12 12.8a7.4 7.4 0 0 1 7.4 7.4V21.4H4.6v-1.2a7.4 7.4 0 0 1 7.4-7.4z"/></svg><span>我的</span></button>
+</nav>
+<script>
+(function() {
+  var panes = ['home', 'files', 'team', 'me'];
+  function show(name) {
+    panes.forEach(function(p) {
+      var pane = document.getElementById('mbp-' + p);
+      var tab = document.querySelector('#mbTabbar .mb-tab[data-tab="' + p + '"]');
+      if (pane) pane.hidden = (p !== name);
+      if (tab) tab.classList.toggle('active', p === name);
+    });
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll('#mbTabbar .mb-tab').forEach(function(t) {
+    t.addEventListener('click', function() { show(t.dataset.tab); });
+  });
+  document.querySelectorAll('[data-goto]').forEach(function(el) {
+    el.addEventListener('click', function() { show(el.dataset.goto); });
+  });
+  show('home');
+})();
+</script>
+<script>
+(function() {
+  function m$(id) { return document.getElementById(id); }
+  function mmsg(msg, ok) {
+    var el = m$('mbProfileMsg');
+    if (!el) return;
+    el.style.color = ok ? 'var(--cr-success)' : 'var(--cr-danger)';
+    el.textContent = msg || '';
+  }
+  function mxhr(method, url, body, okFn, errFn) {
+    if (window.mbLoading) { window.mbLoading(true); }
+    var x = new XMLHttpRequest();
+    x.open(method, url);
+    x.setRequestHeader('Accept', 'application/json');
+    if (body && !(body instanceof FormData)) x.setRequestHeader('Content-Type', 'application/json');
+    x.onload = function() {
+      if (window.mbLoading) { window.mbLoading(false); }
+      var j = null;
+      try { j = JSON.parse(x.responseText); } catch (e) {}
+      if (x.status === 401) { window.mbAuthExpired(); if (errFn) errFn('登录状态已失效，请重新登录'); return; }
+      if (x.status >= 200 && x.status < 300 && j && j.ok) { if (okFn) okFn(j); }
+      else if (errFn) errFn((j && j.error) || '操作失败');
+    };
+    x.onerror = function() {
+      if (window.mbLoading) { window.mbLoading(false); }
+      if (errFn) errFn('网络异常，请重试');
+    };
+    x.send(body ? (body instanceof FormData ? body : JSON.stringify(body)) : null);
+  }
+  function bindMbProfile() {
+    var inp = m$('mbAvatarInput'), btn = m$('mbSaveNicknameBtn'), ni = m$('mbNicknameInput');
+    if (inp) {
+      inp.addEventListener('change', function() {
+        var f = inp.files && inp.files[0];
+        if (!f) return;
+        if (!/^image\//i.test(f.type)) { mmsg('仅支持图片文件', false); return; }
+        if (f.size > 5 * 1024 * 1024) { mmsg('图片不能超过5MB', false); return; }
+        var fd = new FormData();
+        fd.append('avatar', f);
+        mmsg('上传中…', true);
+        mxhr('POST', '/api/account/avatar', fd, function() {
+          mmsg('头像已更新', true);
+          setTimeout(function() { location.reload(); }, 600);
+        }, function(e) { mmsg(e, false); });
+      });
+    }
+    if (btn && ni) {
+      btn.addEventListener('click', function() {
+        var v = (ni.value || '').trim();
+        if (!v) { mmsg('昵称不能为空', false); return; }
+        mxhr('POST', '/api/account/profile', { nickname: v }, function() {
+          mmsg('昵称已保存', true);
+          setTimeout(function() { location.reload(); }, 600);
+        }, function(e) { mmsg(e, false); });
+      });
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindMbProfile);
+  } else {
+    bindMbProfile();
+  }
+})();
+</script>
+
+<!-- 修改密码弹窗 -->
+<div class="modal-overlay" id="passwordModal">
+  <div class="modal-content">
+    <h3><img src="/icons/lock.svg" width="18" height="18" alt=""> 修改密码</h3>
+    <p>请输入原密码和新密码：</p>
+    <form action="/account/password" method="POST">
+      <input type="password" name="oldPassword" required placeholder="原密码">
+      <input type="password" name="newPassword" required placeholder="新密码（至少6位）">
+      <input type="password" name="confirmPassword" required placeholder="确认新密码">
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-primary">确认</button>
+        <button type="button" class="btn btn-outline" id="cancelPassword">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 注销弹窗 -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal-content">
+    <h3><img src="/icons/warning.svg" width="18" height="18" alt=""> 确认注销</h3>
+    <p>请输入密码以确认注销操作：</p>
+    <form action="/account/delete" method="POST">
+      <input type="password" name="password" required placeholder="请输入密码">
+      <div class="modal-actions">
+        <button type="submit" class="btn btn-danger">确认</button>
+        <button type="button" class="btn btn-outline" id="cancelDelete">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<!-- 文件操作菜单 -->
+<div class="modal-overlay" id="fileMenuModal" style="display:none; align-items:flex-end; z-index:11000;">
+  <div class="fm-sheet">
+    <div class="fm-name" id="fmName"></div>
+    <div id="fmList"></div>
+    <button type="button" class="fm-cancel" onclick="closeFileMenu()">取消</button>
+  </div>
+</div>
+<!-- 文件预览弹窗 -->
+<div class="modal-overlay" id="previewModal" style="display:none; z-index:10000;">
+  <div class="modal-content" style="width:94%; max-width:640px; box-sizing:border-box;">
+    <h3 id="pvTitle" style="word-break:break-all; padding-right:24px;">预览</h3>
+    <div id="pvBody" style="max-height:62vh;overflow:auto;text-align:center;background:#111;border-radius:var(--cr-radius-input);min-height:60px;"></div>
+    <div style="margin-top:12px;display:flex;gap:8px;">
+      <a id="pvOpen" class="btn btn-outline" target="_blank" rel="noopener" style="display:none;flex:1;text-align:center;padding:8px 0;">新窗口</a>
+      <a id="pvDl" class="btn btn-outline" style="display:none;flex:1;text-align:center;padding:8px 0;">下载</a>
+      <button type="button" class="btn btn-outline" onclick="closePreview()" style="flex:1;padding:8px 0;">关闭</button>
+    </div>
+  </div>
+</div>
+<!-- 分享链接弹窗 -->
+<div class="modal-overlay" id="shareModal">
+  <div class="modal-content">
+    <h3><img src="/icons/share.svg" width="18" height="18" alt=""> 分享文件</h3>
+    <p id="shareFileName" style="color:var(--cr-text-2); word-break:break-all; font-size:13px;"></p>
+    <p style="color:var(--cr-text-2); font-size:13px;">任何人获得此链接和<b style="color:var(--cr-danger);">4位数字密码</b>即可<b style="color:var(--cr-danger);">无需登录</b>直接下载：</p>
+    <input type="text" id="shareLinkInput" readonly style="width:100%; padding:8px 12px; border:1px solid var(--cr-border); border-radius:var(--cr-radius); font-size:13px; color:var(--cr-text); background:var(--cr-bg); box-sizing:border-box;" onfocus="this.select()">
+    <div style="display:flex; gap:8px; margin-top:8px; align-items:center;">
+      <span style="color:var(--cr-text-2); font-size:13px; white-space:nowrap;">访问密码:</span>
+      <input type="text" id="sharePwdInput" readonly value="----" style="flex:0 0 90px; padding:8px 12px; border:1px solid var(--cr-warning); border-radius:var(--cr-radius); font-size:15px; letter-spacing:3px; text-align:center; color:var(--cr-warning); background:var(--cr-bg); font-weight:bold; box-sizing:border-box;" onfocus="this.select()">
+      <button type="button" class="btn btn-outline" onclick="copySharePwd()" style="flex:1; padding:8px 0; font-size:13px;">复制密码</button>
+    </div>
+    <div id="shareStatus" style="margin:12px 0; font-size:13px;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" onclick="copyShareLink()">复制</button>
+      <button type="button" class="btn btn-danger" onclick="revokeShare()">撤销分享</button>
+      <button type="button" class="btn btn-outline" onclick="closeShareModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('fileInput').addEventListener('change', function(e) {
+  var label = document.getElementById('fileLabel');
+  if (e.target.files.length > 0) {
+    label.textContent = e.target.files[0].name;
+  } else {
+    label.textContent = '选择文件';
+  }
+});
+
+var modal = document.getElementById('deleteModal');
+document.getElementById('deleteAccountBtn').addEventListener('click', function() {
+  modal.style.display = 'flex';
+});
+document.getElementById('cancelDelete').addEventListener('click', function() {
+  modal.style.display = 'none';
+});
+modal.addEventListener('click', function(e) {
+  if (e.target === modal) modal.style.display = 'none';
+});
+
+var pwdModal = document.getElementById('passwordModal');
+document.getElementById('changePasswordBtn').addEventListener('click', function() {
+  pwdModal.style.display = 'flex';
+});
+document.getElementById('cancelPassword').addEventListener('click', function() {
+  pwdModal.style.display = 'none';
+});
+pwdModal.addEventListener('click', function(e) {
+  if (e.target === pwdModal) pwdModal.style.display = 'none';
+});
+
+// ===== 分享链接弹窗 =====
+var pvModal = document.getElementById('previewModal');
+
+// ===== 文件操作菜单(⋯) =====
+var fmModal = document.getElementById('fileMenuModal');
+window.openFileMenu = function(btn) {
+  var d = btn.dataset;
+  var kind = d.kind, fid = d.fid, name = d.name, team = d.team || '';
+  document.getElementById('fmName').textContent = name;
+  var items = [];
+  if (kind === 'file') {
+    items.push({ icon: '👁', label: '预览', fn: function() { closeFileMenu(); openPreview(fid, team || null); } });
+    items.push({ icon: '⬇️', label: '下载', fn: function() { closeFileMenu(); window.location.href = team ? ('/team/' + team + '/download/' + fid) : ('/download/' + fid); } });
+    if (d.canshare === '1') items.push({ icon: '🔗', label: '生成分享链接', fn: function() { closeFileMenu(); openShareModal(fid, name); } });
+  }
+  items.push({ icon: '🗑', label: '删除', danger: true, fn: function() {
+    closeFileMenu();
+    var isFolder = kind === 'folder';
+    window.mbConfirm({
+      title: isFolder ? '删除文件夹' : '删除文件',
+      message: isFolder ? ('确定删除文件夹「' + name + '」？内部所有文件都会被永久删除！') : '确定删除该文件？',
+      okText: '删除',
+      danger: true,
+      onOk: function () {
+        var f = document.createElement('form');
+        f.method = 'POST';
+        f.action = isFolder ? ('/folder/' + fid + '/delete') : ('/delete/' + fid);
+        document.body.appendChild(f);
+        f.submit();
+      }
+    });
+  }});
+  var list = document.getElementById('fmList');
+  list.innerHTML = '';
+  items.forEach(function(it) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'fm-item' + (it.danger ? ' danger' : '');
+    var ic = document.createElement('span'); ic.className = 'fm-i'; ic.textContent = it.icon;
+    var lb = document.createElement('span'); lb.textContent = it.label;
+    b.appendChild(ic); b.appendChild(lb);
+    b.addEventListener('click', it.fn);
+    list.appendChild(b);
+  });
+  fmModal.style.display = 'flex';
+};
+window.closeFileMenu = function() { fmModal.style.display = 'none'; };
+fmModal.addEventListener('click', function(e) { if (e.target === fmModal) closeFileMenu(); });
+
+// ===== 文件预览 =====
+var pvModal = document.getElementById('previewModal');
+window.openPreview = function(fid, teamId) {
+  var api = teamId ? '/team/' + teamId + '/preview/' + fid : '/preview/' + fid;
+  var dl = teamId ? '/team/' + teamId + '/download/' + fid : '/download/' + fid;
+  var body = document.getElementById('pvBody');
+  var openBtn = document.getElementById('pvOpen');
+  var dlBtn = document.getElementById('pvDl');
+  body.innerHTML = '<p style="color:#8a99ab;padding:24px;">加载中…</p>';
+  openBtn.style.display = 'none'; dlBtn.style.display = 'none';
+  document.getElementById('pvTitle').textContent = '预览';
+  pvModal.style.display = 'flex';
+  fetch(api).then(function(r) { return r.json(); }).then(function(d) {
+    if (!d.ok) {
+      body.innerHTML = '<div style="padding:24px 20px;color:#dfe7ef;"><div style="font-size:40px;">📄</div><p style="margin-top:12px;">' + (d.unsupported ? '该格式暂不支持在线预览' : (d.error || '预览失败')) + '</p></div>';
+      dlBtn.href = dl; dlBtn.style.display = 'inline-block';
+      return;
+    }
+    document.getElementById('pvTitle').textContent = d.name;
+    var inner = '';
+    if (d.kind === 'image') inner = '<img src="' + d.url + '" style="max-width:100%;max-height:66vh;display:block;margin:0 auto;" alt="">';
+    else if (d.kind === 'pdf') inner = '<iframe src="' + d.url + '" style="width:100%;height:64vh;border:none;background:#fff;display:block;"></iframe>';
+    else if (d.kind === 'video') inner = '<video src="' + d.url + '" controls autoplay style="width:100%;max-height:64vh;background:#000;display:block;"></video>';
+    else if (d.kind === 'audio') inner = '<audio src="' + d.url + '" controls autoplay style="width:100%;display:block;margin-top:20vh;"></audio>';
+    else if (d.kind === 'text') inner = '<iframe src="' + d.url + '" style="width:100%;height:64vh;border:none;background:#fff;display:block;text-align:left;"></iframe>';
+    body.innerHTML = inner;
+    openBtn.href = d.url; openBtn.style.display = 'inline-block';
+    dlBtn.href = dl; dlBtn.style.display = 'inline-block';
+  }).catch(function() {
+    body.innerHTML = '<div style="padding:24px 20px;color:#dfe7ef;">预览失败，请下载查看</div>';
+    dlBtn.href = dl; dlBtn.style.display = 'inline-block';
+  });
+};
+window.closePreview = function() { pvModal.style.display = 'none'; };
+pvModal.addEventListener('click', function(e) { if (e.target === pvModal) closePreview(); });
+var shareModal = document.getElementById('shareModal');
+var currentShareFileId = null;
+
+window.openShareModal = function(fileId, fileName) {
+  currentShareFileId = fileId;
+  document.getElementById('shareFileName').textContent = fileName || '';
+  document.getElementById('shareLinkInput').value = '正在生成链接...';
+  document.getElementById('sharePwdInput').value = '----';
+  document.getElementById('shareStatus').textContent = '';
+  shareModal.style.display = 'flex';
+
+  fetch('/share/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileId: fileId })
+  }).then(function(resp) {
+    if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.error || '生成失败'); });
+    return resp.json();
+  }).then(function(data) {
+    document.getElementById('shareLinkInput').value = window.location.origin + data.url;
+    document.getElementById('sharePwdInput').value = data.password || '----';
+  }).catch(function(err) {
+    document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-danger);"><img src="/icons/cross.svg" width="16" height="16" alt=""> ' + err.message + '</span>';
+    document.getElementById('shareLinkInput').value = '';
+  });
+};
+
+window.closeShareModal = function() {
+  shareModal.style.display = 'none';
+  currentShareFileId = null;
+};
+
+window.copyShareLink = function() {
+  var input = document.getElementById('shareLinkInput');
+  if (!input.value || input.value.indexOf('http') !== 0) return;
+  input.select();
+  input.setSelectionRange(0, 99999);
+  try {
+    document.execCommand('copy');
+    document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-success);"><img src="/icons/check.svg" width="16" height="16" alt=""> 链接已复制（请连同下方密码一起发给对方）</span>';
+  } catch (e) {
+    document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-text-2);">请手动复制链接</span>';
+  }
+};
+
+window.copySharePwd = function() {
+  var input = document.getElementById('sharePwdInput');
+  if (!input.value || input.value === '----') return;
+  input.select();
+  input.setSelectionRange(0, 99999);
+  try {
+    document.execCommand('copy');
+    document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-success);"><img src="/icons/check.svg" width="16" height="16" alt=""> 密码已复制</span>';
+  } catch (e) {
+    document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-text-2);">请手动复制密码</span>';
+  }
+};
+
+window.revokeShare = function() {
+  if (!currentShareFileId) return;
+  window.mbConfirm({
+    title: '撤销分享',
+    message: '确定撤销该文件的分享链接？撤销后链接立即失效。',
+    okText: '撤销',
+    danger: true,
+    onOk: function () {
+      fetch('/share/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId: currentShareFileId })
+      }).then(function(resp) {
+        if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.error || '撤销失败'); });
+        return resp.json();
+      }).then(function() {
+        document.getElementById('shareLinkInput').value = '';
+        document.getElementById('sharePwdInput').value = '----';
+        document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-success);"><img src="/icons/check.svg" width="16" height="16" alt=""> 分享已撤销，链接已失效</span>';
+      }).catch(function(err) {
+        document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-danger);"><img src="/icons/cross.svg" width="16" height="16" alt=""> ' + err.message + '</span>';
+      });
+    }
+  });
+};
+
+shareModal.addEventListener('click', function(e) {
+  if (e.target === shareModal) closeShareModal();
+});
+</script>
+<script src="/js/app.js"></script>
+
+<%- include('partials/footer-mobile') %>

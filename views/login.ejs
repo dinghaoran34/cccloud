@@ -1,0 +1,121 @@
+<%- include('partials/header') %>
+
+<div class="cr-auth">
+  <div class="cr-auth-box">
+    <!-- 品牌区 -->
+    <div class="cr-auth-brand">
+      <a href="/" class="cr-brand">
+        <img src="/icons/cloud.svg" width="24" height="24" alt="">
+        <span>CC网盘</span>
+      </a>
+      <h2>团队文件，一处安放</h2>
+      <p>安全存储个人文件，与团队成员共享协作，随时随地访问你的云盘。</p>
+      <ul>
+        <li><img src="/icons/check.svg" width="16" height="16" alt="">个人空间与团队空间</li>
+        <li><img src="/icons/check.svg" width="16" height="16" alt="">在线预览与分享链接</li>
+        <li><img src="/icons/check.svg" width="16" height="16" alt="">团队协作与文件共享</li>
+      </ul>
+    </div>
+
+    <!-- 登录表单 -->
+    <div class="cr-auth-form">
+      <h1>欢迎回来</h1>
+      <p class="cr-auth-sub">登录您的CC网盘账户</p>
+
+      <% if (error) { %>
+        <div class="cr-alert cr-alert-error">
+          <img src="/icons/warning.svg" width="18" height="18" alt="">
+          <span><%= error %></span>
+        </div>
+      <% } %>
+
+      <% if (typeof deleted !== 'undefined' && deleted) { %>
+        <div class="cr-alert cr-alert-success">
+          <img src="/icons/check.svg" width="18" height="18" alt="">
+          <span>账户已成功注销，感谢使用CC网盘</span>
+        </div>
+      <% } %>
+
+      <form id="loginForm" action="/login" method="POST">
+        <div class="cr-field">
+          <label class="cr-label" for="username">用户名</label>
+          <input class="cr-input" type="text" id="username" name="username" required placeholder="请输入用户名">
+        </div>
+
+        <div class="cr-field">
+          <label class="cr-label" for="password">密码</label>
+          <input class="cr-input" type="password" id="password" name="password" required placeholder="请输入密码">
+        </div>
+
+        <div class="cr-auth-extra">
+          <label class="cr-check">
+            <input type="checkbox" name="rememberMe" value="true" checked>
+            <span>记住我（7天内免登录）</span>
+          </label>
+          <label class="cr-check">
+            <input type="checkbox" name="agree" id="agreeCheck" value="true">
+            <span>已阅读并同意<a href="/agreement" target="_blank" rel="noopener">用户协议</a></span>
+          </label>
+        </div>
+
+        <div id="captcha-box" style="margin-bottom:16px;"></div>
+        <input type="hidden" name="lot_number" id="lot_number">
+        <input type="hidden" name="captcha_output" id="captcha_output">
+        <input type="hidden" name="pass_token" id="pass_token">
+        <input type="hidden" name="gen_time" id="gen_time">
+
+        <button type="button" id="loginBtn" class="cr-btn cr-btn-primary cr-btn-block">登录</button>
+      </form>
+
+      <div class="cr-auth-foot">
+        <p>还没有账户？ <a href="/register">立即注册</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://static.geetest.com/v4/gt4.js"></script>
+<script>
+(function() {
+  let captchaObj = null;
+  const form = document.getElementById('loginForm');
+  const btn = document.getElementById('loginBtn');
+
+  initGeetest4({
+    captchaId: '<%= captchaId %>',
+    product: 'bind',
+    language: 'zho',
+    protocol: 'https://'
+  }, (captcha) => {
+    captchaObj = captcha;
+    captcha.onSuccess(() => {
+      const result = captchaObj.getValidate();
+      if (!result) {
+        alert('请先完成验证');
+        return;
+      }
+      document.getElementById('lot_number').value = result.lot_number;
+      document.getElementById('captcha_output').value = result.captcha_output;
+      document.getElementById('pass_token').value = result.pass_token;
+      document.getElementById('gen_time').value = result.gen_time;
+      form.submit();
+    }).onError(() => {
+      alert('验证码异常，请刷新页面重试');
+    });
+  });
+
+  btn.addEventListener('click', () => {
+    if (!document.getElementById('agreeCheck').checked) {
+      alert('请先阅读并勾选同意用户协议');
+      return;
+    }
+    if (!captchaObj) {
+      alert('验证码正在加载中，请稍后重试');
+      return;
+    }
+    captchaObj.showCaptcha();
+  });
+})();
+</script>
+
+<%- include('partials/footer') %>

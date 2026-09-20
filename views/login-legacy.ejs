@@ -1,0 +1,122 @@
+<%- include('partials/header-legacy') %>
+
+<div class="auth-container">
+  <div class="auth-card">
+    <h1>欢迎回来</h1>
+    <p class="auth-subtitle">登录您的CC网盘账户</p>
+
+    <% if (error) { %>
+      <div class="alert"><%= error %></div>
+    <% } %>
+
+    <% if (typeof deleted !== 'undefined' && deleted) { %>
+      <div class="alert" style="background-color: #d1fae5; color: #065f46; border: 1px solid #6ee7b7;">
+        账户已成功注销，感谢使用CC网盘
+      </div>
+    <% } %>
+
+    <form id="loginForm" action="/login" method="POST" class="auth-form">
+      <div class="form-group">
+        <label for="username">用户名</label>
+        <input type="text" id="username" name="username" required placeholder="请输入用户名">
+      </div>
+
+      <div class="form-group">
+        <label for="password">密码</label>
+        <input type="password" id="password" name="password" required placeholder="请输入密码">
+      </div>
+
+      <div class="form-group" style="margin-bottom:16px;">
+        <label style="display:block; cursor:pointer; font-weight:400; font-size:14px;">
+          <input type="checkbox" name="rememberMe" value="true" checked style="width:16px; height:16px; vertical-align:middle; margin-right:6px;">
+          <span style="vertical-align:middle;">记住我（7天内免登录）</span>
+        </label>
+      </div>
+
+      <div class="form-group" style="margin-bottom:16px;">
+        <label style="display:block; cursor:pointer; font-weight:400; font-size:14px;">
+          <input type="checkbox" name="agree" id="agreeCheck" value="true" style="width:16px; height:16px; vertical-align:middle; margin-right:6px;">
+          <span style="vertical-align:middle;">我已阅读并同意<a href="/agreement" target="_blank">用户协议</a></span>
+        </label>
+      </div>
+
+      <div id="captcha-box" style="margin-bottom:20px;"></div>
+      <input type="hidden" name="lot_number" id="lot_number">
+      <input type="hidden" name="captcha_output" id="captcha_output">
+      <input type="hidden" name="pass_token" id="pass_token">
+      <input type="hidden" name="gen_time" id="gen_time">
+
+      <button type="button" id="loginBtn" class="btn btn-primary btn-block">登录</button>
+    </form>
+
+    <div class="auth-footer">
+      <p>还没有账户？ <a href="/register">立即注册</a></p>
+    </div>
+  </div>
+</div>
+
+<script src="https://static.geetest.com/v4/gt4.js"></script>
+<script>
+// ES3 兼容 - 极验行为验证第四代，含降级方案
+var captchaObj = null;
+var geetestLoaded = false;
+
+// 检测极验SDK是否加载成功
+if (typeof initGeetest4 === 'function') {
+  geetestLoaded = true;
+  initGeetest4({
+    captchaId: '<%= captchaId %>',
+    product: 'bind',
+    language: 'zho',
+    protocol: 'https://'
+  }, function(captcha) {
+    captchaObj = captcha;
+    captcha.onSuccess(function() {
+      var result = captchaObj.getValidate();
+      if (!result) {
+        alert('请先完成验证');
+        return;
+      }
+      document.getElementById('lot_number').value = result.lot_number;
+      document.getElementById('captcha_output').value = result.captcha_output;
+      document.getElementById('pass_token').value = result.pass_token;
+      document.getElementById('gen_time').value = result.gen_time;
+      document.getElementById('loginForm').submit();
+    });
+    captcha.onError(function() {
+      alert('验证码异常，请刷新页面重试');
+    });
+  });
+}
+
+// 按钮点击处理
+function handleLoginClick() {
+  var agreeEl = document.getElementById('agreeCheck');
+  if (agreeEl && !agreeEl.checked) {
+    alert('请先阅读并勾选同意用户协议');
+    return;
+  }
+  if (geetestLoaded && captchaObj) {
+    // 极验正常 - 弹出验证码
+    captchaObj.showCaptcha();
+  } else if (!geetestLoaded) {
+    // 极验SDK加载失败 - 降级方案：直接提交表单
+    document.getElementById('loginForm').submit();
+  } else {
+    // SDK已加载但实例未就绪，等待2秒再试
+    alert('验证码正在加载中，请稍后重试');
+  }
+}
+
+// 兼容旧浏览器的事件绑定
+var btn = document.getElementById('loginBtn');
+if (btn.addEventListener) {
+  btn.addEventListener('click', handleLoginClick, false);
+} else if (btn.attachEvent) {
+  btn.attachEvent('onclick', handleLoginClick);
+} else {
+  btn.onclick = handleLoginClick;
+}
+</script>
+
+<%- include('partials/footer-legacy') %>

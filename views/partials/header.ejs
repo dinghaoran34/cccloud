@@ -1,0 +1,45 @@
+<%
+  /* 访客页外壳（首页 / 登录 / 注册）：顶部导航 + 页面容器
+     登录态下也复用（顶栏显示用户菜单），与 App 外壳共用同一套设计令牌 */
+  var _cu = (typeof currentUser !== 'undefined' && currentUser) ? currentUser : null;
+%>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="/css/style.css?v=2026091902">
+  <script>
+    /* 主题预置：避免刷新时闪白/闪黑（默认跟随系统，手动选择存 localStorage） */
+    (function () {
+      try {
+        var t = localStorage.getItem('cr_theme');
+        if (t === 'dark' || t === 'light') { document.documentElement.setAttribute('data-theme', t); }
+      } catch (e) { }
+    })();
+  </script>
+</head>
+<body>
+<nav class="cr-navbar">
+  <div class="cr-navbar-in">
+    <a href="/" class="cr-brand">
+      <img src="/icons/cloud.svg" width="24" height="24" alt="">
+      <span>CC网盘</span>
+    </a>
+    <div class="cr-navbar-links">
+      <% if (_cu) { %>
+        <a href="/dashboard" class="cr-navlink">文件</a>
+        <a href="/trash" class="cr-navlink">回收站</a>
+        <a href="/search" class="cr-navlink">搜索</a>
+      <% } else { %>
+        <a href="/login" class="cr-navlink">登录</a>
+        <a href="/register" class="cr-btn cr-btn-primary">注册</a>
+      <% } %>
+      <%- include('cr-theme-btn') %>
+      <%- include('cr-user-menu') %>
+    </div>
+  </div>
+</nav>
+<main class="cr-page">

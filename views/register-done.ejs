@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>注册完成 - CC网盘</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 24px; background: linear-gradient(135deg, #2b7de9, #1f6fd0);
+    font-family: -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .done-card {
+    width: 100%; max-width: 400px; background: #fff; border-radius: 16px;
+    padding: 32px 24px 26px; text-align: center;
+    box-shadow: 0 18px 48px rgba(16, 24, 40, .22);
+  }
+  .done-ico {
+    width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: #e8f2fe; color: #2b7de9; font-size: 32px; font-weight: 700; line-height: 1;
+  }
+  .done-title { margin: 0 0 10px; font-size: 21px; font-weight: 700; color: #25272b; }
+  .done-desc { margin: 0 0 22px; font-size: 14px; line-height: 1.6; color: #6b7280; }
+  .done-tip {
+    margin: 0; padding: 12px 14px; border-radius: 10px; background: #f5f7fa;
+    font-size: 13px; line-height: 1.6; color: #6b7280; text-align: left;
+  }
+  .done-brand { margin-top: 20px; font-size: 12px; color: #9aa3af; }
+</style>
+</head>
+<body>
+  <div class="done-card">
+    <div class="done-ico">✓</div>
+    <h1 class="done-title">注册完成</h1>
+    <p class="done-desc">
+      账号 <b><%= username %></b> 已创建成功。
+    </p>
+    <p class="done-tip">
+      请返回 APP 使用刚注册的账号登录。<br>
+      本页面可以直接关闭。
+    </p>
+    <div class="done-brand">CC网盘</div>
+  </div>
+</body>
+</html>

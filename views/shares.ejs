@@ -1,0 +1,252 @@
+<%
+  /* 我的分享管理页（阶段一）：
+     列出当前用户的全部分享链接（文件/文件夹），支持复制链接、复制提取码、取消分享
+     数据由 server.js 的 GET /shares 提供：shares = [{token,kind,name,size,url,password,expires_at,expired,download_count,created_at}] */
+  function fmtSize(bytes) {
+    if (bytes === null || bytes === undefined) return '—';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  }
+%>
+<%- include('partials/cr-shell-head', { crActive: 'shares' }) %>
+  <header class="cr-topbar">
+    <button type="button" class="cr-hamburger" data-cr-drawer-open title="打开菜单" aria-label="打开菜单">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M4.6 5.6h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 10.5h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 15.4h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3z"/></svg>
+    </button>
+    <nav class="cr-crumb" aria-label="面包屑">
+      <a class="cr-crumb-item" href="/dashboard">文件</a>
+      <span class="cr-crumb-sep">/</span>
+      <span class="cr-crumb-item is-current">我的分享</span>
+    </nav>
+    <div class="cr-top-actions">
+      <form class="cr-search" action="/search" method="GET" role="search">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M4.8 10.8a6 6 0 1 0 12 0a6 6 0 1 0-12 0zM6.9 10.8a3.9 3.9 0 1 0 7.8 0a3.9 3.9 0 1 0-7.8 0z"/><path d="M19.26 14.74L19.26 14.74A1.2 1.2 0 0 1 19.26 16.43L16.43 19.26A1.2 1.2 0 0 1 14.74 19.26L14.74 19.26A1.2 1.2 0 0 1 14.74 17.57L17.57 14.74A1.2 1.2 0 0 1 19.26 14.74Z"/></svg>
+        <input type="search" name="q" placeholder="搜索文件…" autocomplete="off" aria-label="搜索文件">
+      </form>
+      <%- include('partials/cr-theme-btn') %>
+      <%- include('partials/cr-user-menu') %>
+    </div>
+  </header>
+
+  <div class="cr-content">
+    <div class="cr-toolbar">
+      <span class="cr-toolbar-sub">共 <%= shareCount %> 个分享</span>
+      <span class="cr-spring"></span>
+      <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" id="shRefresh">刷新</button>
+      <a class="cr-btn cr-btn-ghost cr-btn-sm" href="/dashboard">返回文件</a>
+    </div>
+
+    <div class="cr-card">
+      <% if (!shares || !shares.length) { %>
+        <div class="cr-empty">
+          <img src="/icons/share.svg" width="56" height="56" alt="">
+          <p>还没有创建任何分享，可在文件条目的「更多操作 → 分享」中创建</p>
+        </div>
+      <% } else { %>
+        <div class="cr-table-scroll">
+          <table class="cr-table">
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th class="cr-col-size">类型</th>
+                <th>提取码</th>
+                <th>有效期</th>
+                <th class="cr-col-size">下载次数</th>
+                <th class="cr-col-time">创建时间</th>
+                <th class="cr-col-ops">操作</th>
+              </tr>
+            </thead>
+            <tbody id="shBody">
+              <% shares.forEach(function(s) { %>
+                <tr data-token="<%= s.token %>" data-url="<%= s.url %>" data-pwd="<%= s.password %>" data-name="<%= s.name %>">
+                  <td>
+                    <div class="cr-name">
+                      <span class="cr-fi cr-fi--<%= s.kind === 'folder' ? 'folder' : 'other' %>">
+                        <img src="<%= s.kind === 'folder' ? '/icons/folder.svg' : '/icons/file-generic.svg' %>" width="20" height="20" alt="">
+                      </span>
+                      <a class="cr-name-text" href="<%= s.url %>" target="_blank" rel="noopener" title="<%= s.name %>"><%= s.name %></a>
+                    </div>
+                  </td>
+                  <td class="cr-col-size"><%= s.kind === 'folder' ? '文件夹' : ('文件 ' + fmtSize(s.size)) %></td>
+                  <td>
+                    <% if (s.password) { %><span class="cr-tag cr-tag-muted" data-pwd-text><%= s.password %></span><% } else { %><span class="cr-hint">无</span><% } %>
+                  </td>
+                  <td>
+                    <% if (s.expired) { %>
+                      <span class="cr-tag cr-tag-danger">已过期</span>
+                    <% } else if (s.expires_at) { %>
+                      <span class="cr-tag cr-tag-muted"><%= s.expires_at %> 到期</span>
+                    <% } else { %>
+                      <span class="cr-tag cr-tag-success">永久</span>
+                    <% } %>
+                  </td>
+                  <td class="cr-col-size"><%= s.download_count %></td>
+                  <td class="cr-col-time"><%= s.created_at %></td>
+                  <td class="cr-col-ops">
+                    <div class="cr-row-ops">
+                      <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-shcopy>复制链接</button>
+                      <% if (s.password) { %><button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-shcopypwd>复制提取码</button><% } %>
+                      <a class="cr-btn cr-btn-ghost cr-btn-sm" href="<%= s.url %>" target="_blank" rel="noopener">打开</a>
+                      <button type="button" class="cr-btn cr-btn-danger cr-btn-sm" data-shrevoke>取消分享</button>
+                    </div>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+  <!-- 通用确认弹窗 -->
+  <div id="shConfirmModal" class="cr-modal-mask" style="display:none">
+    <div class="cr-modal" style="width:400px">
+      <h3 class="cr-modal-title" id="shConfirmTitle">确认操作</h3>
+      <p class="cr-hint" id="shConfirmMsg" style="margin-bottom:6px;white-space:pre-wrap;"></p>
+      <div class="cr-modal-btns">
+        <button type="button" class="cr-btn cr-btn-ghost" id="shConfirmCancel">取消</button>
+        <button type="button" class="cr-btn cr-btn-primary" id="shConfirmOk">确定</button>
+      </div>
+    </div>
+  </div>
+  <div id="shAlertModal" class="cr-modal-mask" style="display:none">
+    <div class="cr-modal" style="width:400px">
+      <h3 class="cr-modal-title" id="shAlertTitle">提示</h3>
+      <p class="cr-hint" id="shAlertMsg" style="margin-bottom:6px;white-space:pre-wrap;"></p>
+      <div class="cr-modal-btns">
+        <button type="button" class="cr-btn cr-btn-primary" id="shAlertOk">知道了</button>
+      </div>
+    </div>
+  </div>
+  <div class="cr-toasts" id="shToasts"></div>
+
+  <script>
+  (function () {
+    function $(id) { return document.getElementById(id); }
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function toast(msg, kind) {
+      var wrap = $('shToasts');
+      if (!wrap) return;
+      var el = document.createElement('div');
+      el.className = 'cr-toast' + (kind ? ' is-' + kind : '');
+      el.textContent = msg;
+      wrap.appendChild(el);
+      setTimeout(function () { if (el.parentNode) { el.parentNode.removeChild(el); } }, 2800);
+    }
+    function alertBox(msg, title) {
+      $('shAlertTitle').textContent = title || '提示';
+      $('shAlertMsg').textContent = msg || '';
+      var modal = $('shAlertModal');
+      modal.style.display = 'flex';
+      var ok = $('shAlertOk');
+      function done() {
+        modal.style.display = 'none';
+        ok.removeEventListener('click', done);
+        modal.removeEventListener('click', onMask);
+      }
+      function onMask(e) { if (e.target === modal) { done(); } }
+      ok.addEventListener('click', done);
+      modal.addEventListener('click', onMask);
+    }
+    function confirmBox(opt) {
+      return new Promise(function (resolve) {
+        var modal = $('shConfirmModal');
+        var ok = $('shConfirmOk');
+        var cancel = $('shConfirmCancel');
+        $('shConfirmTitle').textContent = (opt && opt.title) || '确认操作';
+        $('shConfirmMsg').textContent = (opt && opt.message) || '';
+        ok.textContent = (opt && opt.okText) || '确定';
+        ok.className = 'cr-btn ' + ((opt && opt.danger) ? 'cr-btn-danger' : 'cr-btn-primary');
+        modal.style.display = 'flex';
+        function done(v) {
+          modal.style.display = 'none';
+          ok.removeEventListener('click', onOk);
+          cancel.removeEventListener('click', onCancel);
+          modal.removeEventListener('click', onMask);
+          resolve(v);
+        }
+        function onOk() { done(true); }
+        function onCancel() { done(false); }
+        function onMask(e) { if (e.target === modal) { done(false); } }
+        ok.addEventListener('click', onOk);
+        cancel.addEventListener('click', onCancel);
+        modal.addEventListener('click', onMask);
+      });
+    }
+    function copyText(text) {
+      return new Promise(function (resolve) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () { resolve(true); }).catch(function () { resolve(fallback()); });
+          return;
+        }
+        resolve(fallback());
+        function fallback() {
+          try {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            var ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            return ok;
+          } catch (e) { return false; }
+        }
+      });
+    }
+
+    var body = $('shBody');
+    if (body) {
+      body.addEventListener('click', function (e) {
+        var tr = e.target.closest ? e.target.closest('tr') : null;
+        if (!tr) return;
+        var token = tr.dataset.token;
+        var name = tr.dataset.name || '';
+        if (e.target.closest('[data-shcopy]')) {
+          copyText(window.location.origin + tr.dataset.url).then(function (ok) {
+            toast(ok ? '链接已复制' : '复制失败，请手动复制', ok ? 'success' : 'error');
+          });
+          return;
+        }
+        if (e.target.closest('[data-shcopypwd]')) {
+          copyText(tr.dataset.pwd || '').then(function (ok) {
+            toast(ok ? '提取码已复制' : '复制失败，请手动复制', ok ? 'success' : 'error');
+          });
+          return;
+        }
+        if (e.target.closest('[data-shrevoke]')) {
+          confirmBox({
+            title: '取消分享',
+            message: '确定取消「' + name + '」的分享链接？取消后该链接立即失效。',
+            danger: true,
+            okText: '确认取消'
+          }).then(function (ok) {
+            if (!ok) return;
+            fetch('/share/revoke-by-token', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: token })
+            }).then(function (r) { return r.json(); }).then(function (j) {
+              if (!j || !j.ok) { alertBox((j && j.error) || '取消失败'); return; }
+              tr.parentNode.removeChild(tr);
+              toast('已取消分享', 'success');
+            }).catch(function (err) { alertBox('取消失败：' + err.message); });
+          });
+        }
+      });
+    }
+    var refresh = $('shRefresh');
+    if (refresh) { refresh.addEventListener('click', function () { location.reload(); }); }
+    void esc;
+  })();
+  </script>
+<%- include('partials/cr-shell-foot') %>

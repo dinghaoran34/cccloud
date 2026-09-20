@@ -1,0 +1,107 @@
+<%- include('partials/header-mobile') %>
+
+<div class="auth-container">
+  <div class="auth-card">
+    <h1>欢迎回来</h1>
+    <p class="auth-subtitle">登录您的CC网盘账户</p>
+
+    <% if (error) { %>
+      <div class="alert alert-error">
+        <span class="alert-icon"><img src="/icons/warning.svg" width="16" height="16" alt=""></span><span><%= error %></span>
+      </div>
+    <% } %>
+
+    <% if (typeof deleted !== 'undefined' && deleted) { %>
+      <div class="alert alert-success">
+        <span class="alert-icon"><img src="/icons/check.svg" width="16" height="16" alt=""></span><span>账户已成功注销，感谢使用CC网盘</span>
+      </div>
+    <% } %>
+
+    <form id="loginForm" action="/login" method="POST" class="auth-form">
+      <div class="form-group">
+        <label for="username">用户名</label>
+        <input type="text" id="username" name="username" required placeholder="请输入用户名">
+      </div>
+
+      <div class="form-group">
+        <label for="password">密码</label>
+        <input type="password" id="password" name="password" required placeholder="请输入密码">
+      </div>
+
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 400; color: var(--cr-text-2); font-size: 15px;">
+          <input type="checkbox" name="rememberMe" value="true" checked style="width: 18px; height: 18px; accent-color: var(--cr-primary); cursor: pointer;">
+          <span>记住我（7天内免登录）</span>
+        </label>
+      </div>
+
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 400; color: var(--cr-text-2); font-size: 15px;">
+          <input type="checkbox" name="agree" id="agreeCheck" value="true" style="width: 18px; height: 18px; accent-color: var(--cr-primary); cursor: pointer;">
+          <span>我已阅读并同意<a href="/agreement" target="_blank" rel="noopener">用户协议</a></span>
+        </label>
+      </div>
+
+      <div id="captcha-box" style="margin-bottom: 16px;"></div>
+      <input type="hidden" name="lot_number" id="lot_number">
+      <input type="hidden" name="captcha_output" id="captcha_output">
+      <input type="hidden" name="pass_token" id="pass_token">
+      <input type="hidden" name="gen_time" id="gen_time">
+
+      <button type="button" id="loginBtn" class="btn btn-primary btn-block">登录</button>
+    </form>
+
+    <div class="auth-footer">
+      <p>还没有账户？ <a href="/register">立即注册</a></p>
+    </div>
+  </div>
+</div>
+
+<script src="https://static.geetest.com/v4/gt4.js"></script>
+<script>
+(function() {
+  var form = document.getElementById('loginForm');
+  var btn = document.getElementById('loginBtn');
+
+  // ===== 极验第四代（bind 模式）；SDK 加载失败时降级直提（与兼容版一致，覆盖老安卓 WebView） =====
+  var captchaObj = null;
+  var geetestLoaded = (typeof initGeetest4 === 'function');
+  if (geetestLoaded) {
+    initGeetest4({
+      captchaId: '<%= captchaId %>',
+      product: 'bind',
+      language: 'zho',
+      protocol: 'https://'
+    }, function(captcha) {
+      captchaObj = captcha;
+      captcha.onSuccess(function() {
+        var result = captchaObj.getValidate();
+        if (!result) { window.mbToast('请先完成验证', 'err'); return; }
+        document.getElementById('lot_number').value = result.lot_number;
+        document.getElementById('captcha_output').value = result.captcha_output;
+        document.getElementById('pass_token').value = result.pass_token;
+        document.getElementById('gen_time').value = result.gen_time;
+        form.submit();
+      }).onError(function() {
+        window.mbToast('验证码异常，请刷新重试', 'err');
+      });
+    });
+  }
+
+  btn.addEventListener('click', function() {
+    if (!document.getElementById('agreeCheck').checked) {
+      window.mbToast('请先阅读并勾选同意用户协议', 'err');
+      return;
+    }
+    if (captchaObj) {
+      captchaObj.showCaptcha();
+    } else if (!geetestLoaded) {
+      form.submit(); // 降级：极验SDK不可用（如老安卓 WebView），由服务器跳过验证
+    } else {
+      window.mbToast('验证码正在加载中，请稍后重试', 'err');
+    }
+  });
+})();
+</script>
+
+<%- include('partials/footer-mobile') %>

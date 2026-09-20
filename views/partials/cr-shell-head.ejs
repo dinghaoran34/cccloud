@@ -1,0 +1,30 @@
+<%
+  /* 应用外壳（上半）：head + 主题预置脚本 + 左侧边栏 + 遮罩 + 主区容器
+     用法：include('partials/cr-shell-head', { crActive: 'files' })
+     约定：页面自身紧接着输出 header.cr-topbar 与 div.cr-content，
+           最后用 partials/cr-shell-foot 收尾（由它闭合 .cr-content / .cr-main / .cr-app）。 */
+%>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="/css/style.css?v=2026091902">
+  <script>
+    /* 主题预置：避免刷新时闪白/闪黑（默认跟随系统，手动选择存 localStorage） */
+    (function () {
+      try {
+        var t = localStorage.getItem('cr_theme');
+        if (t === 'dark' || t === 'light') { document.documentElement.setAttribute('data-theme', t); }
+      } catch (e) { }
+    })();
+  </script>
+</head>
+<body>
+<div class="cr-app" id="crApp">
+  <div class="cr-app-banner-wrap"><%- include('cr-app-banner') %></div>
+  <%- include('cr-sidebar') %>
+  <div class="cr-mask" id="crMask"></div>
+  <div class="cr-main">

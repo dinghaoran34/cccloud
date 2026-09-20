@@ -1,0 +1,137 @@
+<%- include('partials/cr-shell-head', { crActive: 'trash' }) %>
+  <header class="cr-topbar">
+    <button type="button" class="cr-hamburger" data-cr-drawer-open title="打开菜单" aria-label="打开菜单">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M4.6 5.6h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 10.5h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 15.4h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3z"/></svg>
+    </button>
+    <nav class="cr-crumb" aria-label="面包屑">
+      <a class="cr-crumb-item" href="/dashboard">文件</a>
+      <span class="cr-crumb-sep">/</span>
+      <span class="cr-crumb-item is-current">回收站</span>
+    </nav>
+    <div class="cr-top-actions">
+      <form class="cr-search" action="/search" method="GET" role="search">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M4.8 10.8a6 6 0 1 0 12 0a6 6 0 1 0-12 0zM6.9 10.8a3.9 3.9 0 1 0 7.8 0a3.9 3.9 0 1 0-7.8 0z"/><path d="M19.26 14.74L19.26 14.74A1.2 1.2 0 0 1 19.26 16.43L16.43 19.26A1.2 1.2 0 0 1 14.74 19.26L14.74 19.26A1.2 1.2 0 0 1 14.74 17.57L17.57 14.74A1.2 1.2 0 0 1 19.26 14.74Z"/></svg>
+        <input type="search" name="q" placeholder="搜索文件…" autocomplete="off" aria-label="搜索文件">
+      </form>
+      <%- include('partials/cr-theme-btn') %>
+      <%- include('partials/cr-user-menu') %>
+    </div>
+  </header>
+
+  <div class="cr-content">
+    <div id="alert"></div>
+
+    <div class="cr-toolbar">
+      <span class="cr-toolbar-sub" id="count">回收站</span>
+      <span class="cr-spring"></span>
+      <button type="button" class="cr-btn cr-btn-ghost" id="restoreAll" onclick="restoreAll()">全部恢复</button>
+      <button type="button" class="cr-btn cr-btn-danger" id="clearAll" onclick="clearAll()">清空回收站</button>
+    </div>
+
+    <div class="cr-card" id="list"></div>
+  </div>
+
+<script>
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function say(t){
+    var a = $('alert');
+    a.innerHTML = '';
+    if (t) { a.className = 'cr-alert cr-alert-error'; a.textContent = t; }
+    else { a.className = ''; }
+  }
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+  function iconFor(kind){
+    if (kind === 'folder') { return '<span class="cr-fi cr-fi--folder"><img src="/icons/folder.svg" width="20" height="20" alt=""></span>'; }
+    return '<span class="cr-fi cr-fi--other"><img src="/icons/file-generic.svg" width="20" height="20" alt=""></span>';
+  }
+  function emptyBox(text){
+    return '<div class="cr-empty"><img src="/icons/empty.svg" width="56" height="56" alt=""><p>' + esc(text) + '</p></div>';
+  }
+  function load(){
+    var x = new XMLHttpRequest();
+    x.open('GET', '/api/trash/list');
+    x.onload = function(){
+      var j = null; try { j = JSON.parse(x.responseText); } catch(e) {}
+      if (!j || !j.ok) { say('回收站加载失败，请刷新重试'); return; }
+      render(j.folders || [], j.files || []);
+    };
+    x.onerror = function(){ say('网络错误，请稍后重试'); };
+    x.send();
+  }
+  function rows(folders, files){
+    var h = '';
+    folders.forEach(function(f){
+      h += '<tr>'
+        + '<td><div class="cr-name">' + iconFor('folder')
+        + '<span class="cr-name-text" title="' + esc(f.name) + '">' + esc(f.name) + '</span>'
+        + '<span class="cr-tag cr-tag-muted">文件夹</span></div></td>'
+        + '<td class="cr-col-size">—</td>'
+        + '<td class="cr-col-time">' + esc(f.deleted_at || '') + '</td>'
+        + '<td class="cr-col-ops"><div class="cr-row-ops">'
+        + '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-act="restore" data-kind="folder" data-id="' + f.id + '">恢复</button>'
+        + '<button type="button" class="cr-btn cr-btn-danger cr-btn-sm" data-act="purge" data-kind="folder" data-id="' + f.id + '">彻底删除</button>'
+        + '</div></td></tr>';
+    });
+    files.forEach(function(f){
+      var size = f.file_size ? (f.file_size < 1024 ? f.file_size + ' B' : (f.file_size < 1048576 ? (f.file_size/1024).toFixed(1) + ' KB' : (f.file_size < 1073741824 ? (f.file_size/1048576).toFixed(1) + ' MB' : (f.file_size/1073741824).toFixed(1) + ' GB'))) : '0 B';
+      h += '<tr>'
+        + '<td><div class="cr-name">' + iconFor('file')
+        + '<span class="cr-name-text" title="' + esc(f.filename) + '">' + esc(f.filename) + '</span></div></td>'
+        + '<td class="cr-col-size">' + size + '</td>'
+        + '<td class="cr-col-time">' + esc(f.deleted_at || '') + '</td>'
+        + '<td class="cr-col-ops"><div class="cr-row-ops">'
+        + '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-act="restore" data-kind="file" data-id="' + f.id + '">恢复</button>'
+        + '<button type="button" class="cr-btn cr-btn-danger cr-btn-sm" data-act="purge" data-kind="file" data-id="' + f.id + '">彻底删除</button>'
+        + '</div></td></tr>';
+    });
+    return h;
+  }
+  function render(folders, files){
+    window.__trashF = folders || [];
+    window.__trashFiles = files || [];
+    var c = $('list');
+    $('count').textContent = '回收站（文件夹 ' + folders.length + ' · 文件 ' + files.length + '）';
+    if (!folders.length && !files.length) { c.innerHTML = emptyBox('回收站是空的'); return; }
+    c.innerHTML = '<div class="cr-table-scroll"><table class="cr-table"><thead><tr>'
+      + '<th>名称</th><th class="cr-col-size">大小</th><th class="cr-col-time">删除时间</th><th class="cr-col-ops">操作</th>'
+      + '</tr></thead><tbody>' + rows(folders, files) + '</tbody></table></div>';
+  }
+  function act(url, body){
+    var x = new XMLHttpRequest();
+    x.open('POST', url);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.onload = function(){
+      var j = null; try { j = JSON.parse(x.responseText); } catch(e) {}
+      if (j && j.ok) { say(''); load(); } else { say((j && j.error) || '操作失败'); }
+    };
+    x.onerror = function(){ say('网络错误，请稍后重试'); };
+    x.send(JSON.stringify(body));
+  }
+  // 行内操作（事件委托）
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest ? e.target.closest('[data-act]') : null;
+    if (!btn) return;
+    var isFolder = btn.dataset.kind === 'folder';
+    var body = { folderIds: isFolder ? [Number(btn.dataset.id)] : [], fileIds: isFolder ? [] : [Number(btn.dataset.id)] };
+    if (btn.dataset.act === 'restore') { act('/api/trash/restore', body); }
+    else if (confirm('彻底删除后不可恢复，确定？')) { act('/api/trash/purge', body); }
+  });
+
+  window.restoreAll = function(){
+    var fd = (window.__trashF || []).map(function(f){ return f.id; });
+    var fl = (window.__trashFiles || []).map(function(f){ return f.id; });
+    if (!fd.length && !fl.length) return;
+    act('/api/trash/restore', { folderIds: fd, fileIds: fl });
+  };
+  window.clearAll = function(){
+    if (confirm('将彻底删除回收站全部内容，不可恢复！确定？')) act('/api/trash/empty', {});
+  };
+  load();
+})();
+</script>
+<%- include('partials/cr-shell-foot') %>

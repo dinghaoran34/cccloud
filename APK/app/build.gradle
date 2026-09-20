@@ -1,0 +1,63 @@
+plugins {
+    id 'com.android.application'
+}
+
+// 正式签名配置：从工程根目录的 keystore.properties 读取；
+// 该文件不存在时自动回退为调试签名（便于无密钥环境下本地构建）。
+def keystorePropsFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+def hasReleaseSigning = false
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+    hasReleaseSigning = keystoreProps['storeFile'] && keystoreProps['storePassword'] &&
+            keystoreProps['keyAlias'] && keystoreProps['keyPassword']
+}
+
+android {
+    namespace 'com.cubecute.ccyun'
+    compileSdk 36
+    buildToolsVersion '36.1.0'
+
+    defaultConfig {
+        applicationId "com.cubecute.ccyun"
+        // 原生应用：最低支持 Android 3.0 (API 11，Holo 主题下限)；目标 28（保留传统下载/存储行为）
+        minSdk 11
+        targetSdk 28
+        versionCode 41
+        versionName "6.10"
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            release {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // 有正式密钥则用正式密钥签名，否则回退调试密钥（仅用于本地开发调试）
+            signingConfig hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    // 零第三方依赖：原生界面基于 Android framework（Holo 主题）。
+    // 唯一内嵌浏览器：极验3.0 验证码小弹窗（CaptchaDialog 中的 WebView）。
+}

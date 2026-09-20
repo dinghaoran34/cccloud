@@ -1,0 +1,76 @@
+<%- include('partials/cr-shell-head', { crActive: 'files' }) %>
+  <header class="cr-topbar">
+    <button type="button" class="cr-hamburger" data-cr-drawer-open title="打开菜单" aria-label="打开菜单">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M4.6 5.6h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 10.5h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 15.4h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3z"/></svg>
+    </button>
+    <nav class="cr-crumb" aria-label="面包屑">
+      <a class="cr-crumb-item" href="<%= backUrl %>">文件</a>
+      <span class="cr-crumb-sep">/</span>
+      <span class="cr-crumb-item is-current" title="<%= fileName %>"><%= fileName %></span>
+      <span class="cr-tag cr-tag-muted" style="margin-left:8px;"><%= kindLabel %></span>
+    </nav>
+    <div class="cr-top-actions">
+      <span class="cr-hint" style="margin-right:4px;"><%= sizeText %></span>
+      <a class="cr-btn cr-btn-primary" href="<%= downloadUrl %>" download>下载</a>
+      <% if (editConfigured) { %>
+        <a class="cr-btn cr-btn-ghost" href="/office/<%= fileId %>/edit">在线编辑</a>
+      <% } else { %>
+        <button type="button" class="cr-btn cr-btn-ghost" id="editBtn" title="需部署 OnlyOffice Document Server">在线编辑</button>
+      <% } %>
+      <%- include('partials/cr-theme-btn') %>
+      <%- include('partials/cr-user-menu') %>
+    </div>
+  </header>
+
+  <div class="cr-content">
+    <div class="cr-card">
+      <div class="cr-card-head">
+        <h3>只读预览（服务端解析）</h3>
+        <span class="cr-spring"></span>
+        <span class="cr-hint">内容由 CC网盘服务端本地解析，不依赖任何外部服务</span>
+      </div>
+      <div class="cr-card-body">
+        <div class="cr-office-view"><%- contentHtml %></div>
+      </div>
+    </div>
+    <% if (!editConfigured) { %>
+      <p class="cr-hint" style="margin-top:12px;">如需在线编辑，请部署 OnlyOffice Document Server 并配置 ONLYOFFICE_URL。</p>
+    <% } %>
+  </div>
+
+<% if (!editConfigured) { %>
+<div id="editModal" class="cr-modal-mask" style="display:none; z-index:10001">
+  <div class="cr-modal" style="width:480px">
+    <h3 class="cr-modal-title">在线编辑不可用</h3>
+    <p class="cr-hint" style="white-space:pre-wrap;"><%= editMsg %></p>
+    <div class="cr-modal-btns">
+      <button type="button" class="cr-btn cr-btn-primary" id="editModalOk">知道了</button>
+    </div>
+  </div>
+</div>
+<% } %>
+
+<script>
+(function(){
+  // xlsx 多工作表切换
+  var tabs = document.getElementById('crOfficeTabs');
+  if (tabs) {
+    tabs.addEventListener('click', function(e){
+      var b = e.target.closest ? e.target.closest('[data-sheet]') : null;
+      if (!b) return;
+      Array.prototype.forEach.call(tabs.querySelectorAll('[data-sheet]'), function(x){ x.classList.remove('is-active'); });
+      b.classList.add('is-active');
+      var idx = b.getAttribute('data-sheet');
+      Array.prototype.forEach.call(document.querySelectorAll('.cr-office-pane'), function(p){
+        if (p.getAttribute('data-pane') === idx) p.removeAttribute('hidden'); else p.setAttribute('hidden', 'hidden');
+      });
+    });
+  }
+  var eb = document.getElementById('editBtn');
+  if (eb) {
+    eb.onclick = function(){ document.getElementById('editModal').style.display = 'flex'; };
+    document.getElementById('editModalOk').onclick = function(){ document.getElementById('editModal').style.display = 'none'; };
+  }
+})();
+</script>
+<%- include('partials/cr-shell-foot') %>

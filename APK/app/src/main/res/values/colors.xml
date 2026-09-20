@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand">#2563eb</color>
+    <color name="brand_dark">#1d4ed8</color>
+    <color name="bg">#f3f4f6</color>
+    <color name="card">#ffffff</color>
+    <color name="text_main">#1f2937</color>
+    <color name="text_sub">#6b7280</color>
+    <color name="line">#e5e7eb</color>
+    <color name="danger">#dc2626</color>
+    <color name="success">#16a34a</color>
+    <color name="tab_active">#2563eb</color>
+    <color name="tab_inactive">#9ca3af</color>
+    <color name="bubble_mine">#2563eb</color>
+    <color name="bubble_other">#ffffff</color>
+</resources>

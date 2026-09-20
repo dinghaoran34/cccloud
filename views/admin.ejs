@@ -1,0 +1,740 @@
+<%- include('partials/cr-shell-head', { crActive: 'admin' }) %>
+  <header class="cr-topbar">
+    <button type="button" class="cr-hamburger" data-cr-drawer-open title="打开菜单" aria-label="打开菜单">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M4.6 5.6h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 10.5h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 15.4h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3z"/></svg>
+    </button>
+    <nav class="cr-crumb" aria-label="面包屑">
+      <a class="cr-crumb-item" href="/dashboard">文件</a>
+      <span class="cr-crumb-sep">/</span>
+      <span class="cr-crumb-item is-current">管理后台</span>
+    </nav>
+    <div class="cr-top-actions">
+      <form class="cr-search" action="/search" method="GET" role="search">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M4.8 10.8a6 6 0 1 0 12 0a6 6 0 1 0-12 0zM6.9 10.8a3.9 3.9 0 1 0 7.8 0a3.9 3.9 0 1 0-7.8 0z"/><path d="M19.26 14.74L19.26 14.74A1.2 1.2 0 0 1 19.26 16.43L16.43 19.26A1.2 1.2 0 0 1 14.74 19.26L14.74 19.26A1.2 1.2 0 0 1 14.74 17.57L17.57 14.74A1.2 1.2 0 0 1 19.26 14.74Z"/></svg>
+        <input type="search" name="q" placeholder="搜索文件…" autocomplete="off" aria-label="搜索文件">
+      </form>
+      <%- include('partials/cr-theme-btn') %>
+      <%- include('partials/cr-user-menu') %>
+    </div>
+  </header>
+
+  <div class="cr-content">
+    <div id="msg"></div>
+
+    <div class="cr-card">
+      <div class="cr-card-body">
+        <div class="cr-seg cr-admin-tabs" id="accTabs" role="tablist">
+          <button type="button" class="cr-seg-btn is-active" data-tab="users">用户管理</button>
+          <button type="button" class="cr-seg-btn" data-tab="keys">API 密钥</button>
+          <button type="button" class="cr-seg-btn" data-tab="audit">审计日志</button>
+          <button type="button" class="cr-seg-btn" data-tab="policies">存储策略</button>
+          <button type="button" class="cr-seg-btn" data-tab="groups">用户组</button>
+          <button type="button" class="cr-seg-btn" data-tab="off">未启用功能</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== 用户管理 ==================== -->
+    <section class="cr-tabpane" id="pane-users">
+      <div class="cr-card">
+        <div class="cr-card-head">
+          <h2><img src="/icons/users.svg" width="18" height="18" alt="">用户管理</h2>
+        </div>
+        <div id="users">
+          <div class="cr-empty"><p>加载中…</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== API 密钥 ==================== -->
+    <section class="cr-tabpane" id="pane-keys" hidden>
+      <div class="cr-card">
+        <div class="cr-card-head">
+          <h2><img src="/icons/key.svg" width="18" height="18" alt="">API 密钥管理</h2>
+        </div>
+        <div class="cr-card-body">
+          <div class="cr-inline-form">
+            <input class="cr-input" id="key-label" placeholder="密钥用途备注，如：自动化脚本">
+            <button type="button" class="cr-btn cr-btn-primary" onclick="genKey()">生成密钥</button>
+          </div>
+          <div id="keys">
+            <div class="cr-empty"><p>加载中…</p></div>
+          </div>
+          <p class="cr-hint" style="margin-top:12px;">生成的密钥可用于：① 免极验登录接口 /api/login/no-captcha（请求头 X-Api-Key 或请求体 apiKey）；② 开放 API v1（请求头 Authorization: Bearer &lt;密钥&gt;）；③ WebDAV Basic 认证的密码。请妥善保管，删除后立即失效。</p>
+        </div>
+      </div>
+
+      <div class="cr-card">
+        <div class="cr-card-head">
+          <h2><img src="/icons/globe.svg" width="18" height="18" alt="">开放 API v1 用法</h2>
+        </div>
+        <div class="cr-card-body">
+          <p class="cr-hint">所有接口以 <code class="cr-mono">Authorization: Bearer &lt;api_key&gt;</code> 鉴权；密钥即上方「API 密钥管理」生成或在服务端环境变量 <code class="cr-mono">INTERNAL_API_KEY</code> 配置（后者默认以内置管理员身份操作，可用请求头 <code class="cr-mono">X-User-Id</code> 指定其他用户）。返回统一为 <code class="cr-mono">{ok:true,...}</code> / <code class="cr-mono">{ok:false,error}</code>；密钥无效或缺失返回 401，用户组禁用开放 API 时返回 403。</p>
+          <div class="cr-block">
+            <div class="cr-block-head"><h4>接口一览</h4></div>
+            <div class="cr-kv"><b>当前用户</b><span><code class="cr-mono">GET /api/v1/me</code></span></div>
+            <div class="cr-kv"><b>列目录</b><span><code class="cr-mono">GET /api/v1/files?folderId=</code></span></div>
+            <div class="cr-kv"><b>新建文件夹</b><span><code class="cr-mono">POST /api/v1/folders</code> JSON：<code class="cr-mono">{"name":"目录名","parentId":0}</code></span></div>
+            <div class="cr-kv"><b>上传文件</b><span><code class="cr-mono">POST /api/v1/upload</code> multipart：<code class="cr-mono">file=@本地文件</code>，可选 <code class="cr-mono">folderId</code></span></div>
+            <div class="cr-kv"><b>下载文件</b><span><code class="cr-mono">GET /api/v1/download/:id</code>（302 跳转到下载地址）</span></div>
+            <div class="cr-kv"><b>删除文件</b><span><code class="cr-mono">DELETE /api/v1/files/:id</code>（移入回收站）</span></div>
+          </div>
+          <div class="cr-block">
+            <div class="cr-block-head"><h4>curl 示例</h4></div>
+<pre class="cr-codeblock"># 1) 查看当前用户与容量
+curl -H "Authorization: Bearer tc_xxxxxxxx" http://127.0.0.1:9178/api/v1/me
+
+# 2) 列出根目录
+curl -H "Authorization: Bearer tc_xxxxxxxx" "http://127.0.0.1:9178/api/v1/files"
+
+# 3) 新建文件夹
+curl -X POST -H "Authorization: Bearer tc_xxxxxxxx" -H "Content-Type: application/json" \
+     -d "{\"name\":\"api-目录\"}" http://127.0.0.1:9178/api/v1/folders
+
+# 4) 上传文件（落到当前默认存储策略）
+curl -X POST -H "Authorization: Bearer tc_xxxxxxxx" \
+     -F "file=@./本地文件.txt" http://127.0.0.1:9178/api/v1/upload
+
+# 5) 下载文件（-L 跟随 302，直接拿到文件内容）
+curl -L -H "Authorization: Bearer tc_xxxxxxxx" \
+     -o ./下载.txt http://127.0.0.1:9178/api/v1/download/123
+
+# 6) 删除文件（进入回收站）
+curl -X DELETE -H "Authorization: Bearer tc_xxxxxxxx" \
+     http://127.0.0.1:9178/api/v1/files/123</pre>
+          </div>
+          <div class="cr-block">
+            <div class="cr-block-head"><h4>WebDAV</h4></div>
+            <p class="cr-hint">挂载地址 <code class="cr-mono">/dav</code>，使用 HTTP Basic 认证：用户名为站点用户名，密码为账户密码或该用户创建的 API 密钥。支持 OPTIONS / PROPFIND / GET / HEAD / PUT / DELETE / MKCOL / MOVE / COPY；路径映射到个人文件树根目录。macOS Finder、rclone、cadaver 等标准客户端可直接连接。</p>
+<pre class="cr-codeblock"># 列出根目录（XML 多状态响应）
+curl -u "用户名:密码" -X PROPFIND -H "Depth: 1" http://127.0.0.1:9178/dav/
+
+# 上传
+curl -u "用户名:密码" -T ./本地文件.txt http://127.0.0.1:9178/dav/本地文件.txt
+
+# 下载
+curl -u "用户名:密码" -o ./下载.txt http://127.0.0.1:9178/dav/本地文件.txt
+
+# rclone 配置示例
+# [teamcloud]
+# type = webdav
+# url = http://127.0.0.1:9178/dav
+# vendor = other
+# user = 用户名
+# pass = 密码（或 API 密钥）</pre>
+            <p class="cr-hint">安全说明：WebDAV 与开放 API 均已做严格鉴权与路径校验，拒绝 <code class="cr-mono">..</code>、绝对路径、盘符与特殊字符，并仅能在认证用户自己的文件树内读写。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 审计日志 ==================== -->
+    <section class="cr-tabpane" id="pane-audit" hidden>
+      <div class="cr-card">
+        <div class="cr-card-head">
+          <h2><img src="/icons/list.svg" width="18" height="18" alt="">审计日志</h2>
+        </div>
+        <div class="cr-card-body">
+          <div class="cr-filterbar">
+            <input class="cr-input" id="audit-user" placeholder="按用户名筛选（模糊）">
+            <select class="cr-select" id="audit-action"><option value="">全部操作类型</option></select>
+            <button type="button" class="cr-btn cr-btn-primary cr-btn-sm" onclick="applyAuditFilter()">筛选</button>
+            <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" onclick="resetAuditFilter()">重置</button>
+          </div>
+          <div id="audit">
+            <div class="cr-empty"><p>加载中…</p></div>
+          </div>
+          <div class="cr-pagebar">
+            <span id="audit-stat">—</span>
+            <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" id="audit-prev" onclick="auditPage(-1)">上一页</button>
+            <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" id="audit-next" onclick="auditPage(1)">下一页</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 存储策略 ==================== -->
+    <section class="cr-tabpane" id="pane-policies" hidden>
+      <div class="cr-card">
+        <div class="cr-card-head">
+          <h2><img src="/icons/storage.svg" width="18" height="18" alt="">存储策略</h2>
+        </div>
+        <div class="cr-card-body">
+          <div class="cr-inline-form">
+            <button type="button" class="cr-btn cr-btn-primary" onclick="openPolicyModal()">新增本地磁盘策略</button>
+            <button type="button" class="cr-btn cr-btn-ghost" onclick="loadSystem()">刷新</button>
+          </div>
+          <p class="cr-hint" style="margin-bottom:12px;">新上传的文件会写入「默认策略」；切换默认策略只影响之后的上传，已有文件仍按各自记录的策略读写（S3 / 本地磁盘均可正常下载、预览、删除、复制与打包）。</p>
+          <div id="policies">
+            <div class="cr-empty"><p>加载中…</p></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cr-card">
+        <div class="cr-card-head">
+          <h2><img src="/icons/gear.svg" width="18" height="18" alt="">系统信息（关于）</h2>
+        </div>
+        <div class="cr-card-body" id="sysinfo">
+          <div class="cr-empty"><p>加载中…</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 用户组 ==================== -->
+    <section class="cr-tabpane" id="pane-groups" hidden>
+      <div class="cr-card">
+        <div class="cr-card-head">
+          <h2><img src="/icons/users.svg" width="18" height="18" alt="">用户组与权限</h2>
+        </div>
+        <div class="cr-card-body">
+          <div class="cr-inline-form">
+            <button type="button" class="cr-btn cr-btn-primary" onclick="openGroupModal(null)">新增用户组</button>
+            <button type="button" class="cr-btn cr-btn-ghost" onclick="loadGroups()">刷新</button>
+          </div>
+          <p class="cr-hint" style="margin-bottom:12px;">权限在服务端生效：禁用「上传」后上传接口返回 403；禁用「分享」后禁止创建分享链接；禁用「开放 API」「WebDAV」后对应入口返回 403。存储上限为 0 时跟随全局配额（20GB）。</p>
+          <div id="groups">
+            <div class="cr-empty"><p>加载中…</p></div>
+          </div>
+          <p class="cr-hint" style="margin-top:12px;">在「用户管理」标签页可为每个用户选择所属用户组。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 未启用功能 ==================== -->
+    <section class="cr-tabpane" id="pane-off" hidden>
+      <div class="cr-card">
+        <div class="cr-card-head">
+          <h2><img src="/icons/warning.svg" width="18" height="18" alt="">未启用功能（需外部服务）</h2>
+        </div>
+        <div class="cr-card-body">
+          <p class="cr-hint" style="margin-bottom:14px;">以下能力中，部分已实现本地/直链版本，仅「依赖外部服务」的增强项需要额外部署；下表如实标注当前状态。如需启用外部服务，请先准备对应服务并在服务端完成接入配置。</p>
+          <div class="cr-offitem">
+            <img src="/icons/download.svg" alt="">
+            <div>
+              <h4>离线下载</h4>
+              <p>已实现 HTTP/HTTPS 直链离线下载（服务端流式下载、Range 断点续传、并发上限 2、排队 / 暂停 / 继续 / 取消 / 重试、超时与配额校验），入口见左侧「离线下载」。<br>
+                磁力 / 种子：<strong>已支持对接 Aria2，当前未检测到服务</strong>（默认 RPC 地址 127.0.0.1:6800）。部署 Aria2 并配置环境变量 <code>ARIA2_RPC_URL</code> 与可选 <code>ARIA2_RPC_SECRET</code> 后重启即可启用。</p>
+            </div>
+          </div>
+          <div class="cr-offitem">
+            <img src="/icons/file-doc.svg" alt="">
+            <div>
+              <h4>Office 在线预览 / 编辑</h4>
+              <p>在线预览：<strong>已支持</strong>，docx / xlsx / pptx 由服务端本地解析（基于 ziplib 按需读取，无需外部服务），入口为文件预览中的「在线预览」。<br>
+                在线编辑：需 OnlyOffice Document Server，<strong>当前未配置 ONLYOFFICE_URL</strong>，编辑入口会明确提示而不会假装可用；配置 <code>ONLYOFFICE_URL</code> 与可选 <code>ONLYOFFICE_JWT_SECRET</code> 后重启即可启用。</p>
+            </div>
+          </div>
+          <div class="cr-offitem">
+            <img src="/icons/paperclip.svg" alt="">
+            <div>
+              <h4>邮件通知</h4>
+              <p>需要可用的 SMTP 邮件服务与发件账号，当前环境未配置，故未实现「分享通知、容量告警、注册验证邮件」等邮件能力。</p>
+            </div>
+          </div>
+          <div class="cr-offitem">
+            <img src="/icons/globe.svg" alt="">
+            <div>
+              <h4>多家云存储（OSS / COS / 七牛等）</h4>
+              <p>需要各云厂商的 AccessKey / SecretKey 与地域、Bucket 等凭据，当前环境仅配置了自有 S3 兼容存储；存储策略已抽象为可扩展结构，具备凭据后可继续接入更多后端。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+<!-- ==================== 通用确认 / 提示弹窗 ==================== -->
+<div id="crConfirmModal" class="cr-modal-mask" style="display:none">
+  <div class="cr-modal" style="width:400px">
+    <h3 class="cr-modal-title" id="crConfirmTitle">确认操作</h3>
+    <p class="cr-hint" id="crConfirmMsg" style="margin-bottom:6px;white-space:pre-wrap;"></p>
+    <div class="cr-modal-btns">
+      <button type="button" class="cr-btn cr-btn-ghost" id="crConfirmCancel">取消</button>
+      <button type="button" class="cr-btn cr-btn-primary" id="crConfirmOk">确定</button>
+    </div>
+  </div>
+</div>
+
+<div id="crAlertModal" class="cr-modal-mask" style="display:none">
+  <div class="cr-modal" style="width:400px">
+    <h3 class="cr-modal-title" id="crAlertTitle">提示</h3>
+    <p class="cr-hint" id="crAlertMsg" style="margin-bottom:6px;white-space:pre-wrap;"></p>
+    <div class="cr-modal-btns">
+      <button type="button" class="cr-btn cr-btn-primary" id="crAlertOk">知道了</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 用户组弹窗 ==================== -->
+<div id="groupModal" class="cr-modal-mask" style="display:none; z-index:10001">
+  <div class="cr-modal" style="width:460px">
+    <h3 class="cr-modal-title" id="groupModalTitle">新增用户组</h3>
+    <input type="hidden" id="group-id">
+    <div class="cr-field">
+      <label class="cr-hint" for="group-name">用户组名称</label>
+      <input class="cr-input" id="group-name" maxlength="40" placeholder="如：设计组">
+    </div>
+    <div class="cr-field">
+      <label class="cr-hint" for="group-desc">说明</label>
+      <input class="cr-input" id="group-desc" maxlength="200" placeholder="该组的用途说明">
+    </div>
+    <div class="cr-field">
+      <label class="cr-hint" for="group-quota">存储上限（GB，0 表示跟随全局配额 20GB）</label>
+      <input class="cr-input" id="group-quota" type="number" min="0" step="1" value="0">
+    </div>
+    <div class="cr-field">
+      <label class="cr-check"><input type="checkbox" id="group-upload"> 允许上传</label>
+    </div>
+    <div class="cr-field">
+      <label class="cr-check"><input type="checkbox" id="group-share"> 允许创建分享</label>
+    </div>
+    <div class="cr-field">
+      <label class="cr-check"><input type="checkbox" id="group-webdav"> 允许使用 WebDAV</label>
+    </div>
+    <div class="cr-field">
+      <label class="cr-check"><input type="checkbox" id="group-api"> 允许使用开放 API</label>
+    </div>
+    <div class="cr-modal-btns">
+      <button type="button" class="cr-btn cr-btn-ghost" onclick="closeGroupModal()">取消</button>
+      <button type="button" class="cr-btn cr-btn-primary" id="group-save" onclick="saveGroup()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 存储策略弹窗 ==================== -->
+<div id="policyModal" class="cr-modal-mask" style="display:none; z-index:10001">
+  <div class="cr-modal" style="width:480px">
+    <h3 class="cr-modal-title">新增本地磁盘策略</h3>
+    <div class="cr-field">
+      <label class="cr-hint" for="policy-name">策略名称</label>
+      <input class="cr-input" id="policy-name" maxlength="40" placeholder="如：本地磁盘 B">
+    </div>
+    <div class="cr-field">
+      <label class="cr-hint" for="policy-root">存储目录（服务器上的绝对路径，留空则使用项目目录下的 storage-local）</label>
+      <input class="cr-input" id="policy-root" placeholder="如：D:\\teamcloud-data 或 /data/teamcloud">
+    </div>
+    <p class="cr-hint">目录必须位于服务器上且运行用户可写；创建失败会给出提示，不影响其它策略。</p>
+    <div class="cr-modal-btns">
+      <button type="button" class="cr-btn cr-btn-ghost" onclick="closePolicyModal()">取消</button>
+      <button type="button" class="cr-btn cr-btn-primary" onclick="savePolicy()">创建</button>
+    </div>
+  </div>
+</div>
+
+<div class="cr-toasts" id="crToasts"></div>
+
+<script>
+(function () {
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function fmtSize(bytes) {
+    bytes = Number(bytes) || 0;
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  }
+
+  /* ---------- 提示 / 弹窗（自绘 cr-modal，不使用 alert/confirm/prompt） ---------- */
+  window.crToast = function (m, kind) {
+    var wrap = $('crToasts');
+    if (!wrap) return;
+    var el = document.createElement('div');
+    el.className = 'cr-toast' + (kind ? ' is-' + kind : '');
+    el.textContent = m;
+    wrap.appendChild(el);
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 2800);
+  };
+  window.crAlert = function (m, title) {
+    return new Promise(function (resolve) {
+      var modal = $('crAlertModal'), ok = $('crAlertOk');
+      $('crAlertTitle').textContent = title || '提示';
+      $('crAlertMsg').textContent = m || '';
+      modal.style.display = 'flex';
+      try { ok.focus(); } catch (e) { }
+      function done() {
+        modal.style.display = 'none';
+        ok.removeEventListener('click', done);
+        modal.removeEventListener('click', onMask);
+        document.removeEventListener('keydown', onKey);
+        resolve(true);
+      }
+      function onMask(e) { if (e.target === modal) done(); }
+      function onKey(e) { if (e.key === 'Escape' || e.keyCode === 27) done(); }
+      ok.addEventListener('click', done);
+      modal.addEventListener('click', onMask);
+      document.addEventListener('keydown', onKey);
+    });
+  };
+  window.crConfirm = function (opt) {
+    if (typeof opt === 'string') opt = { message: opt };
+    opt = opt || {};
+    return new Promise(function (resolve) {
+      var modal = $('crConfirmModal'), ok = $('crConfirmOk'), cancel = $('crConfirmCancel');
+      $('crConfirmTitle').textContent = opt.title || '确认操作';
+      $('crConfirmMsg').textContent = opt.message || '';
+      ok.textContent = opt.okText || '确定';
+      ok.className = 'cr-btn ' + (opt.danger ? 'cr-btn-danger' : 'cr-btn-primary');
+      modal.style.display = 'flex';
+      try { ok.focus(); } catch (e) { }
+      function done(v) {
+        modal.style.display = 'none';
+        ok.removeEventListener('click', onOk);
+        cancel.removeEventListener('click', onCancel);
+        modal.removeEventListener('click', onMask);
+        document.removeEventListener('keydown', onKey);
+        resolve(v);
+      }
+      function onOk() { done(true); }
+      function onCancel() { done(false); }
+      function onMask(e) { if (e.target === modal) done(false); }
+      function onKey(e) { if (e.key === 'Escape' || e.keyCode === 27) done(false); }
+      ok.addEventListener('click', onOk);
+      cancel.addEventListener('click', onCancel);
+      modal.addEventListener('click', onMask);
+      document.addEventListener('keydown', onKey);
+    });
+  };
+
+  function msg(t, ok) {
+    var m = $('msg');
+    if (!t) { m.innerHTML = ''; m.className = ''; return; }
+    m.className = ok ? 'cr-alert cr-alert-success' : 'cr-alert cr-alert-error';
+    m.innerHTML = '<img src="/icons/' + (ok ? 'check' : 'warning') + '.svg" width="18" height="18" alt=""><span>' + esc(t) + '</span>';
+    if (ok) window.crToast(t, 'success');
+  }
+  function ajax(method, url, body, cb) {
+    var x = new XMLHttpRequest();
+    x.open(method, url);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.onload = function () {
+      var j = null; try { j = JSON.parse(x.responseText); } catch (e) { }
+      if (!j) { cb(null, '响应解析失败'); return; }
+      if (x.status === 401 || x.status === 403) { msg(j.error || '无权限'); cb(j, null); return; }
+      cb(j, null);
+    };
+    x.onerror = function () { cb(null, '网络错误'); };
+    x.send(body ? JSON.stringify(body) : null);
+  }
+
+  /* ---------- 标签页 ---------- */
+  var tabs = document.querySelectorAll('#accTabs .cr-seg-btn');
+  var panes = { users: 'pane-users', keys: 'pane-keys', audit: 'pane-audit', policies: 'pane-policies', groups: 'pane-groups', off: 'pane-off' };
+  function showTab(key) {
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle('is-active', tabs[i].getAttribute('data-tab') === key);
+    }
+    for (var k in panes) {
+      if (!Object.prototype.hasOwnProperty.call(panes, k)) continue;
+      var el = $(panes[k]);
+      if (el) el.hidden = (k !== key);
+    }
+    try { window.location.hash = key === 'users' ? '' : key; } catch (e) { }
+  }
+  for (var ti = 0; ti < tabs.length; ti++) {
+    tabs[ti].addEventListener('click', function () { showTab(this.getAttribute('data-tab')); });
+  }
+
+  /* ---------- 用户管理 ---------- */
+  var groupsCache = [];
+  function loadUsers() {
+    ajax('GET', '/api/admin/users', null, function (j, e) {
+      if (!j || !j.ok) { $('users').innerHTML = '<div class="cr-empty"><p>' + esc((j && j.error) || e || '加载用户失败') + '</p></div>'; return; }
+      var u = j.users || [];
+      var h = '<div class="cr-table-scroll"><table class="cr-table"><thead><tr>'
+        + '<th>ID</th><th>用户名</th><th>角色</th><th>用户组</th><th>状态</th><th class="cr-col-time">注册时间</th><th class="cr-col-ops">操作</th>'
+        + '</tr></thead><tbody>';
+      u.forEach(function (x) {
+        var role = x.role === 'admin' ? '<span class="cr-tag cr-tag-primary">管理员</span>' : '<span class="cr-tag cr-tag-muted">用户</span>';
+        var st = x.banned ? '<span class="cr-tag cr-tag-danger">已封禁</span>' : '<span class="cr-tag cr-tag-success">正常</span>';
+        var sel = '<select class="cr-select" style="min-width:120px" onchange="setUserGroup(' + x.id + ', this.value)">';
+        var matched = false;
+        groupsCache.forEach(function (g) {
+          if (Number(x.group_id) === Number(g.id)) matched = true;
+          sel += '<option value="' + g.id + '"' + (Number(x.group_id) === Number(g.id) ? ' selected' : '') + '>' + esc(g.name) + '</option>';
+        });
+        if (!matched) sel = '<option value="">（未分组）</option>' + sel;
+        sel += '</select>';
+        var ops;
+        if (x.role === 'admin') {
+          ops = '<span class="cr-muted">—</span>';
+        } else {
+          var banBtn = x.banned
+            ? '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" onclick="actBan(' + x.id + ',0)">解封</button>'
+            : '<button type="button" class="cr-btn cr-btn-danger cr-btn-sm" onclick="actBan(' + x.id + ',1)">封禁</button>';
+          var delBtn = '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" onclick="actDel(' + x.id + ',\'' + esc(x.username) + '\')">删除</button>';
+          ops = banBtn + delBtn;
+        }
+        h += '<tr><td>' + x.id + '</td><td>' + esc(x.username) + '</td><td>' + role + '</td><td>' + sel + '</td><td>' + st + '</td><td>'
+          + esc(x.created_at || '') + '</td><td class="cr-col-ops"><div class="cr-row-ops">' + ops + '</div></td></tr>';
+      });
+      $('users').innerHTML = h + '</tbody></table></div>';
+    });
+  }
+  window.actBan = function (id, banned) {
+    var act = banned ? '封禁' : '解封';
+    window.crConfirm({ title: act + '用户', message: '确定要' + act + '该用户吗？', danger: !!banned, okText: act }).then(function (ok) {
+      if (!ok) return;
+      ajax('POST', '/api/admin/users/' + id + '/ban', { banned: banned ? 1 : 0 }, function (j, e) {
+        if (j && j.ok) { msg(act + '成功', true); loadUsers(); loadAudit(1); } else { msg((j && j.error) || e || '操作失败'); }
+      });
+    });
+  };
+  window.actDel = function (id, name) {
+    window.crConfirm({ title: '删除用户', message: '确定要删除用户 ' + name + ' 吗？该操作不可恢复！', danger: true, okText: '删除' }).then(function (ok) {
+      if (!ok) return;
+      ajax('DELETE', '/api/admin/users/' + id, null, function (j, e) {
+        if (j && j.ok) { msg('已删除用户 ' + name, true); loadUsers(); loadAudit(1); } else { msg((j && j.error) || e || '删除失败'); }
+      });
+    });
+  };
+  window.setUserGroup = function (userId, groupId) {
+    if (!groupId) return;
+    ajax('POST', '/api/admin/users/' + userId + '/group', { groupId: Number(groupId) }, function (j, e) {
+      if (j && j.ok) { msg('已设置用户组为「' + j.groupName + '」', true); loadGroups(); loadUsers(); } else { msg((j && j.error) || e || '设置失败'); }
+    });
+  };
+
+  /* ---------- API 密钥 ---------- */
+  function loadKeys() {
+    ajax('GET', '/api/admin/apikeys', null, function (j) {
+      if (!j || !j.ok) { $('keys').innerHTML = '<div class="cr-empty"><p>加载密钥失败</p></div>'; return; }
+      var k = j.keys || [];
+      if (!k.length) { $('keys').innerHTML = '<div class="cr-empty"><p>暂无密钥，点击上方“生成密钥”创建</p></div>'; return; }
+      var h = '';
+      k.forEach(function (x) {
+        h += '<div class="cr-block" style="margin-bottom:10px;">'
+          + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+          + '<code class="cr-mono" style="flex:1;min-width:200px;word-break:break-all;">' + esc(x.api_key) + '</code>'
+          + '<span class="cr-hint">' + esc(x.label || '') + '<br>创建于 ' + esc(x.created_at || '') + (x.owner_name ? ' · 归属 ' + esc(x.owner_name) : '') + '</span>'
+          + '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" onclick="copyKey(\'' + esc(x.api_key) + '\')">复制</button>'
+          + '<button type="button" class="cr-btn cr-btn-danger cr-btn-sm" onclick="actDelKey(' + x.id + ')">删除</button>'
+          + '</div></div>';
+      });
+      $('keys').innerHTML = h;
+    });
+  }
+  window.genKey = function () {
+    var label = $('key-label').value.trim() || '免验证登录密钥';
+    ajax('POST', '/api/admin/apikeys', { label: label }, function (j, e) {
+      if (j && j.ok) {
+        msg('已生成密钥（仅此一次展示）：' + j.apiKey, true);
+        $('key-label').value = ''; loadKeys(); loadAudit(1);
+      } else { msg((j && j.error) || e || '生成失败'); }
+    });
+  };
+  window.copyKey = function (key) {
+    if (navigator.clipboard) { navigator.clipboard.writeText(key).then(function () { msg('已复制到剪贴板', true); }); }
+    else { msg('复制失败，请手动选择复制'); }
+  };
+  window.actDelKey = function (id) {
+    window.crConfirm({ title: '删除密钥', message: '确定删除该密钥？删除后立即失效。', danger: true, okText: '删除' }).then(function (ok) {
+      if (!ok) return;
+      ajax('DELETE', '/api/admin/apikeys/' + id, null, function (j, e) {
+        if (j && j.ok) { msg('密钥已删除', true); loadKeys(); loadAudit(1); } else { msg((j && j.error) || e || '删除失败'); }
+      });
+    });
+  };
+
+  /* ---------- 审计日志 ---------- */
+  var auditState = { page: 1, pages: 1, username: '', action: '' };
+  function loadAudit(page) {
+    if (page) auditState.page = page;
+    var qs = '?page=' + encodeURIComponent(auditState.page)
+      + '&username=' + encodeURIComponent(auditState.username)
+      + '&action=' + encodeURIComponent(auditState.action);
+    ajax('GET', '/api/admin/audit' + qs, null, function (j, e) {
+      if (!j || !j.ok) { $('audit').innerHTML = '<div class="cr-empty"><p>' + esc((j && j.error) || e || '加载失败') + '</p></div>'; return; }
+      auditState.page = j.page; auditState.pages = j.pages;
+      // 操作类型下拉
+      var sel = $('audit-action');
+      var opts = '<option value="">全部操作类型</option>';
+      (j.actions || []).forEach(function (a) {
+        opts += '<option value="' + esc(a.action) + '"' + (auditState.action === a.action ? ' selected' : '') + '>' + esc(a.action) + '（' + a.c + '）</option>';
+      });
+      sel.innerHTML = opts;
+      if (!j.logs.length) {
+        $('audit').innerHTML = '<div class="cr-empty"><p>暂无审计记录</p></div>';
+      } else {
+        var h = '<div class="cr-table-scroll"><table class="cr-table"><thead><tr>'
+          + '<th class="cr-col-time">时间</th><th>用户</th><th>操作</th><th>对象</th><th>详情</th><th>IP</th>'
+          + '</tr></thead><tbody>';
+        j.logs.forEach(function (x) {
+          h += '<tr><td>' + esc(x.created_at || '') + '</td><td>' + esc(x.username || '—') + '</td>'
+            + '<td><span class="cr-tag cr-tag-muted">' + esc(x.action) + '</span></td>'
+            + '<td>' + esc(x.target || '—') + '</td>'
+            + '<td class="cr-audit-detail">' + esc(x.detail || '—') + '</td>'
+            + '<td class="cr-hint">' + esc(x.ip || '—') + '</td></tr>';
+        });
+        $('audit').innerHTML = h + '</tbody></table></div>';
+      }
+      $('audit-stat').textContent = '共 ' + j.total + ' 条 · 第 ' + j.page + ' / ' + j.pages + ' 页（每页 ' + j.pageSize + '）';
+      $('audit-prev').disabled = j.page <= 1;
+      $('audit-next').disabled = j.page >= j.pages;
+    });
+  }
+  window.applyAuditFilter = function () {
+    auditState.username = $('audit-user').value.trim();
+    auditState.action = $('audit-action').value;
+    loadAudit(1);
+  };
+  window.resetAuditFilter = function () {
+    $('audit-user').value = ''; $('audit-action').value = '';
+    auditState.username = ''; auditState.action = '';
+    loadAudit(1);
+  };
+  window.auditPage = function (delta) {
+    var p = auditState.page + delta;
+    if (p < 1 || p > auditState.pages) return;
+    loadAudit(p);
+  };
+
+  /* ---------- 存储策略 ---------- */
+  function loadPolicies() {
+    ajax('GET', '/api/admin/policies', null, function (j, e) {
+      if (!j || !j.ok) { $('policies').innerHTML = '<div class="cr-empty"><p>' + esc((j && j.error) || e || '加载失败') + '</p></div>'; return; }
+      var list = j.policies || [];
+      var h = '<div class="cr-table-scroll"><table class="cr-table"><thead><tr>'
+        + '<th>ID</th><th>名称</th><th>类型</th><th>存储位置</th><th>默认</th><th>创建时间</th><th class="cr-col-ops">操作</th>'
+        + '</tr></thead><tbody>';
+      list.forEach(function (p) {
+        var typeTag = p.type === 's3'
+          ? '<span class="cr-tag cr-tag-primary">S3 对象存储</span>'
+          : '<span class="cr-tag cr-tag-muted">本地磁盘</span>';
+        var loc = p.type === 's3' ? '（环境变量 TEAMCLOUD_S3_* 配置）' : esc(p.root || '');
+        var def = p.is_default ? '<span class="cr-tag cr-tag-success">当前默认</span>' : '<span class="cr-muted">—</span>';
+        var ops = p.is_default ? '<span class="cr-muted">—</span>'
+          : '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" onclick="setDefaultPolicy(' + p.id + ',\'' + esc(p.name) + '\')">设为默认</button>';
+        h += '<tr><td>' + p.id + '</td><td>' + esc(p.name) + '</td><td>' + typeTag + '</td>'
+          + '<td class="cr-hint">' + loc + '</td><td>' + def + '</td><td class="cr-hint">' + esc(p.created_at || '') + '</td>'
+          + '<td class="cr-col-ops"><div class="cr-row-ops">' + ops + '</div></td></tr>';
+      });
+      $('policies').innerHTML = h + '</tbody></table></div>';
+    });
+  }
+  window.setDefaultPolicy = function (id, name) {
+    window.crConfirm({ title: '切换默认存储策略', message: '将「' + name + '」设为默认策略？仅影响之后的新上传，已有文件不受影响。', okText: '切换' }).then(function (ok) {
+      if (!ok) return;
+      ajax('POST', '/api/admin/policies/' + id + '/default', null, function (j, e) {
+        if (j && j.ok) { msg('默认存储策略已切换', true); loadPolicies(); loadSystem(); loadAudit(1); }
+        else { msg((j && j.error) || e || '切换失败'); }
+      });
+    });
+  };
+  window.openPolicyModal = function () {
+    $('policy-name').value = ''; $('policy-root').value = '';
+    $('policyModal').style.display = 'flex';
+    try { $('policy-name').focus(); } catch (e) { }
+  };
+  window.closePolicyModal = function () { $('policyModal').style.display = 'none'; };
+  window.savePolicy = function () {
+    var name = $('policy-name').value.trim();
+    if (!name) { msg('请填写策略名称'); return; }
+    ajax('POST', '/api/admin/policies', { name: name, type: 'local', root: $('policy-root').value.trim() }, function (j, e) {
+      if (j && j.ok) { closePolicyModal(); msg('已新增本地磁盘策略：' + j.root, true); loadPolicies(); loadSystem(); loadAudit(1); }
+      else { msg((j && j.error) || e || '创建失败'); }
+    });
+  };
+  function loadSystem() {
+    ajax('GET', '/api/admin/system', null, function (j, e) {
+      if (!j || !j.ok) { $('sysinfo').innerHTML = '<div class="cr-empty"><p>' + esc((j && j.error) || e || '加载失败') + '</p></div>'; return; }
+      var p = j.defaultPolicy || {};
+      $('sysinfo').innerHTML =
+        '<div class="cr-kv"><b>默认存储策略</b><span>' + esc(p.name || '—') + '（' + esc(p.type || '—') + '）' + (p.root ? '<br>' + esc(p.root) : '') + '</span></div>'
+        + '<div class="cr-kv"><b>已用容量</b><span>' + esc(j.usedText) + ' / 全局配额 ' + esc(j.quotaText) + '（文件 ' + j.fileCount + ' 个）</span></div>'
+        + '<div class="cr-kv"><b>S3 凭据</b><span>' + (j.s3Configured ? '已配置（环境变量 TEAMCLOUD_S3_* 就绪）' : '未配置（服务端缺少 TEAMCLOUD_S3_ACCESS_KEY / SECRET_KEY，S3 策略不可用）') + '</span></div>'
+        + '<div class="cr-kv"><b>WebDAV 地址</b><span><code class="cr-mono">' + esc(j.webdavPath) + '</code></span></div>'
+        + '<div class="cr-kv"><b>系统版本</b><span>' + esc(j.version) + '</span></div>';
+    });
+  }
+  window.loadSystem = loadSystem;
+  window.loadPolicies = loadPolicies;
+
+  /* ---------- 用户组 ---------- */
+  function loadGroups() {
+    ajax('GET', '/api/admin/groups', null, function (j, e) {
+      if (!j || !j.ok) { $('groups').innerHTML = '<div class="cr-empty"><p>' + esc((j && j.error) || e || '加载失败') + '</p></div>'; return; }
+      groupsCache = j.groups || [];
+      var h = '<div class="cr-table-scroll"><table class="cr-table"><thead><tr>'
+        + '<th>ID</th><th>名称</th><th>说明</th><th>存储上限</th><th>上传</th><th>分享</th><th>WebDAV</th><th>开放 API</th><th>用户数</th><th class="cr-col-ops">操作</th>'
+        + '</tr></thead><tbody>';
+      groupsCache.forEach(function (g) {
+        function yn(v) { return Number(v) ? '<span class="cr-tag cr-tag-success">允许</span>' : '<span class="cr-tag cr-tag-danger">禁止</span>'; }
+        var quota = Number(g.max_storage_bytes) > 0 ? fmtSize(g.max_storage_bytes) : '跟随全局';
+        h += '<tr><td>' + g.id + '</td><td>' + esc(g.name) + '</td>'
+          + '<td class="cr-hint">' + esc(g.description || '—') + '</td>'
+          + '<td>' + quota + '</td><td>' + yn(g.can_upload) + '</td><td>' + yn(g.can_share) + '</td>'
+          + '<td>' + yn(g.can_use_webdav) + '</td><td>' + yn(g.can_use_api) + '</td>'
+          + '<td>' + (g.user_count || 0) + '</td>'
+          + '<td class="cr-col-ops"><div class="cr-row-ops">'
+          + '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" onclick="openGroupModal(' + g.id + ')">编辑</button>'
+          + '<button type="button" class="cr-btn cr-btn-danger cr-btn-sm" onclick="delGroup(' + g.id + ',\'' + esc(g.name) + '\')">删除</button>'
+          + '</div></td></tr>';
+      });
+      $('groups').innerHTML = h + '</tbody></table></div>';
+    });
+  }
+  window.loadGroups = loadGroups;
+  window.openGroupModal = function (id) {
+    var g = null;
+    if (id) { groupsCache.forEach(function (x) { if (Number(x.id) === Number(id)) g = x; }); }
+    $('groupModalTitle').textContent = g ? ('编辑用户组：' + g.name) : '新增用户组';
+    $('group-id').value = g ? g.id : '';
+    $('group-name').value = g ? g.name : '';
+    $('group-desc').value = g ? (g.description || '') : '';
+    $('group-quota').value = (g && Number(g.max_storage_bytes) > 0) ? Math.round(Number(g.max_storage_bytes) / (1024 * 1024 * 1024)) : 0;
+    $('group-upload').checked = g ? !!Number(g.can_upload) : true;
+    $('group-share').checked = g ? !!Number(g.can_share) : true;
+    $('group-webdav').checked = g ? !!Number(g.can_use_webdav) : true;
+    $('group-api').checked = g ? !!Number(g.can_use_api) : true;
+    $('groupModal').style.display = 'flex';
+    try { $('group-name').focus(); } catch (e) { }
+  };
+  window.closeGroupModal = function () { $('groupModal').style.display = 'none'; };
+  window.saveGroup = function () {
+    var name = $('group-name').value.trim();
+    if (!name) { msg('请填写用户组名称'); return; }
+    var payload = {
+      name: name,
+      description: $('group-desc').value.trim(),
+      maxStorageBytes: Math.max(0, Math.round((Number($('group-quota').value) || 0) * 1024 * 1024 * 1024)),
+      canUpload: $('group-upload').checked ? 1 : 0,
+      canShare: $('group-share').checked ? 1 : 0,
+      canUseWebdav: $('group-webdav').checked ? 1 : 0,
+      canUseApi: $('group-api').checked ? 1 : 0
+    };
+    var id = $('group-id').value;
+    var method = id ? 'PUT' : 'POST';
+    var url = id ? ('/api/admin/groups/' + id) : '/api/admin/groups';
+    ajax(method, url, payload, function (j, e) {
+      if (j && j.ok) { closeGroupModal(); msg(id ? '用户组已更新' : '用户组已创建', true); loadGroups(); loadUsers(); loadAudit(1); }
+      else { msg((j && j.error) || e || '保存失败'); }
+    });
+  };
+  window.delGroup = function (id, name) {
+    window.crConfirm({ title: '删除用户组', message: '确定删除用户组「' + name + '」？组内仍有用户时将无法删除。', danger: true, okText: '删除' }).then(function (ok) {
+      if (!ok) return;
+      ajax('DELETE', '/api/admin/groups/' + id, null, function (j, e) {
+        if (j && j.ok) { msg('用户组已删除', true); loadGroups(); loadUsers(); loadAudit(1); }
+        else { msg((j && j.error) || e || '删除失败'); }
+      });
+    });
+  };
+
+  /* ---------- 初始化 ---------- */
+  var hash = (window.location.hash || '').replace('#', '');
+  if (panes[hash]) showTab(hash);
+  loadUsers();
+  loadKeys();
+  loadGroups();
+  loadAudit(1);
+  loadPolicies();
+  loadSystem();
+})();
+</script>
+<%- include('partials/cr-shell-foot') %>

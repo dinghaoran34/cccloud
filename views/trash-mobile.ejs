@@ -1,0 +1,137 @@
+<%
+  /* 回收站（移动版）：列表 / 恢复 / 彻底删除 / 全部恢复 / 清空回收站
+     数据走 /api/trash/list 与 /api/trash/{restore,purge,empty}（与桌面版完全一致） */
+%>
+<%- include('partials/header-mobile') %>
+
+<div id="alert"></div>
+
+<div class="mb-toolbar">
+  <span class="mb-toolbar-sub" id="count">回收站</span>
+  <span class="mb-spring"></span>
+  <button type="button" class="btn btn-outline btn-sm" id="restoreAll">全部恢复</button>
+  <button type="button" class="btn btn-danger btn-sm" id="clearAll">清空回收站</button>
+</div>
+
+<div class="card" id="list">
+  <div class="card-body"><div class="empty-state"><p>加载中…</p></div></div>
+</div>
+
+<script>
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+  function fmtSize(b){
+    if (!b) return '0 B';
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+    return (b / 1073741824).toFixed(1) + ' GB';
+  }
+  function say(t){
+    var a = $('alert');
+    a.innerHTML = '';
+    if (t) { a.className = 'alert alert-error'; a.textContent = t; }
+    else { a.className = ''; }
+  }
+  function itemHtml(kind, name, meta, id){
+    var isFolder = kind === 'folder';
+    return '<div class="mb-item">'
+      + '<div class="mb-item-main">'
+      + '<span class="file-icon ' + (isFolder ? 'mb-ico--folder' : 'mb-ico--other') + '"><img src="'
+      + (isFolder ? '/icons/folder.svg' : '/icons/file-generic.svg') + '" width="20" height="20" alt=""></span>'
+      + '<div class="file-info"><div class="file-name" title="' + esc(name) + '">' + esc(name) + '</div>'
+      + '<div class="file-meta">' + esc(meta) + '</div></div>'
+      + '</div>'
+      + '<div class="mb-row-ops">'
+      + '<button type="button" class="btn btn-outline btn-sm" data-act="restore" data-kind="' + kind + '" data-id="' + id + '">恢复</button>'
+      + '<button type="button" class="btn btn-danger btn-sm" data-act="purge" data-kind="' + kind + '" data-id="' + id + '">彻底删除</button>'
+      + '</div></div>';
+  }
+  function render(folders, files){
+    window.__trashF = folders || [];
+    window.__trashFiles = files || [];
+    var c = $('list');
+    $('count').textContent = '回收站（文件夹 ' + folders.length + ' · 文件 ' + files.length + '）';
+    if (!folders.length && !files.length) {
+      c.innerHTML = '<div class="card-body"><div class="empty-state">'
+        + '<div class="empty-icon"><img src="/icons/empty.svg" width="24" height="24" alt=""></div>'
+        + '<p>暂无内容</p><span class="empty-desc">回收站是空的</span></div></div>';
+      return;
+    }
+    var h = '';
+    folders.forEach(function(f){ h += itemHtml('folder', f.name, '文件夹 · 删除于 ' + (f.deleted_at || '—'), f.id); });
+    files.forEach(function(f){ h += itemHtml('file', f.filename, fmtSize(f.file_size) + ' · 删除于 ' + (f.deleted_at || '—'), f.id); });
+    c.innerHTML = h;
+  }
+  function load(){
+    var x = new XMLHttpRequest();
+    x.open('GET', '/api/trash/list');
+    x.onload = function(){
+      var j = null; try { j = JSON.parse(x.responseText); } catch(e) {}
+      if (!j || !j.ok) { say('回收站加载失败，请刷新重试'); return; }
+      say('');
+      render(j.folders || [], j.files || []);
+    };
+    x.onerror = function(){ say('网络异常，请重试'); };
+    x.send();
+  }
+  function act(url, body){
+    var x = new XMLHttpRequest();
+    x.open('POST', url);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.onload = function(){
+      var j = null; try { j = JSON.parse(x.responseText); } catch(e) {}
+      if (x.status === 401) { window.mbAuthExpired(); return; }
+      if (j && j.ok) { say(''); load(); } else { say((j && j.error) || '操作失败'); }
+    };
+    x.onerror = function(){ say('网络异常，请重试'); };
+    x.send(JSON.stringify(body));
+  }
+  // 行内操作（事件委托）
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest ? e.target.closest('[data-act]') : null;
+    if (!btn) return;
+    var isFolder = btn.dataset.kind === 'folder';
+    var body = { folderIds: isFolder ? [Number(btn.dataset.id)] : [], fileIds: isFolder ? [] : [Number(btn.dataset.id)] };
+    if (btn.dataset.act === 'restore') { act('/api/trash/restore', body); }
+    else {
+      window.mbConfirm({
+        title: '彻底删除',
+        message: '彻底删除后不可恢复，确定？',
+        okText: '彻底删除',
+        danger: true,
+        onOk: function(){ act('/api/trash/purge', body); }
+      });
+    }
+  });
+
+  $('restoreAll').onclick = function(){
+    var fd = (window.__trashF || []).map(function(f){ return f.id; });
+    var fl = (window.__trashFiles || []).map(function(f){ return f.id; });
+    if (!fd.length && !fl.length) { window.mbToast('回收站已空'); return; }
+    window.mbConfirm({
+      title: '全部恢复',
+      message: '确定恢复回收站中的全部内容？',
+      okText: '全部恢复',
+      onOk: function(){ act('/api/trash/restore', { folderIds: fd, fileIds: fl }); }
+    });
+  };
+  $('clearAll').onclick = function(){
+    window.mbConfirm({
+      title: '清空回收站',
+      message: '将彻底删除回收站全部内容，不可恢复！确定？',
+      okText: '清空',
+      danger: true,
+      onOk: function(){ act('/api/trash/empty', {}); }
+    });
+  };
+  load();
+})();
+</script>
+
+<%- include('partials/footer-mobile') %>

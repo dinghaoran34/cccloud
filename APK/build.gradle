@@ -1,0 +1,5 @@
+// 团队云安卓客户端 - 根构建脚本
+// AGP 9.3 + Gradle 9.5 + JDK 17, minSdk 14 (Android 4.0)
+plugins {
+    id 'com.android.application' version '9.3.0' apply false
+}

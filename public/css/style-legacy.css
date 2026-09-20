@@ -1,0 +1,536 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  background-color: #f0f6ff;
+  color: #1e3a5f;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+/* 导航栏 - 用 table 布局替代 flexbox */
+.navbar {
+  background-color: #2563eb;
+  position: relative;
+  height: 64px;
+  width: 100%;
+}
+
+.nav-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  height: 64px;
+}
+
+.nav-table {
+  width: 100%;
+  height: 64px;
+  border-collapse: collapse;
+}
+
+.nav-table td {
+  vertical-align: middle;
+  padding: 0 20px;
+}
+
+.nav-table td.nav-left {
+  text-align: left;
+}
+
+.nav-table td.nav-right {
+  text-align: right;
+}
+
+.nav-brand {
+  color: white;
+  font-size: 20px;
+  font-weight: bold;
+  text-decoration: none;
+}
+
+.logo-icon {
+  font-size: 24px;
+  margin-right: 8px;
+}
+
+.nav-link {
+  color: white;
+  text-decoration: none;
+  padding: 8px 16px;
+}
+
+.nav-link:hover {
+  background-color: #1e40af;
+}
+
+.nav-user {
+  color: white;
+  font-size: 12px;
+  padding-right: 10px;
+}
+
+/* 主内容区 */
+.main-content {
+  min-height: 400px;
+  padding: 40px 0;
+}
+
+.container {
+  width: 95%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* 首页 Hero 区域 */
+.hero-section {
+  padding: 40px 0;
+}
+
+.hero-content {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.hero-content h1 {
+  font-size: 28px;
+  color: #1e3a5f;
+  margin-bottom: 20px;
+  font-weight: bold;
+}
+
+.hero-subtitle {
+  font-size: 16px;
+  color: #6b7c93;
+  margin-bottom: 30px;
+}
+
+.hero-actions {
+  text-align: center;
+  padding: 10px 0;
+}
+
+.hero-actions .btn {
+  margin: 0 10px;
+}
+
+/* 特性卡片 - 用 table 布局替代 grid */
+.hero-features {
+  width: 100%;
+  margin-top: 40px;
+}
+
+.features-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.features-table td {
+  width: 33%;
+  vertical-align: top;
+  padding: 15px;
+}
+
+.feature-card {
+  background: white;
+  padding: 25px;
+  text-align: center;
+  border: 1px solid #c5dbf0;
+}
+
+.feature-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+
+.feature-card h3 {
+  color: #1e3a5f;
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.feature-card p {
+  color: #6b7c93;
+  font-size: 13px;
+}
+
+/* 认证页面 */
+.auth-container {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.auth-card {
+  background: white;
+  padding: 30px;
+  border: 1px solid #c5dbf0;
+  width: 400px;
+  max-width: 100%;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.auth-card h1 {
+  text-align: center;
+  color: #1e3a5f;
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+
+.auth-subtitle {
+  text-align: center;
+  color: #6b7c93;
+  font-size: 13px;
+  margin-bottom: 25px;
+}
+
+.auth-form .form-group {
+  margin-bottom: 18px;
+}
+
+.auth-form label {
+  display: block;
+  margin-bottom: 6px;
+  color: #1e3a5f;
+  font-weight: bold;
+  font-size: 13px;
+}
+
+.auth-form input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 2px solid #c5dbf0;
+  font-size: 14px;
+  background-color: #f8fbff;
+}
+
+.auth-form input:focus {
+  border-color: #2563eb;
+  background-color: white;
+}
+
+.auth-footer {
+  text-align: center;
+  margin-top: 18px;
+  color: #6b7c93;
+  font-size: 13px;
+}
+
+.auth-footer a {
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+/* 提示框 */
+.alert {
+  padding: 10px 14px;
+  margin-bottom: 18px;
+  border: 1px solid #fed7d7;
+  background-color: #fef0f0;
+  color: #c53030;
+  font-size: 13px;
+}
+
+/* 按钮 */
+.btn {
+  display: inline-block;
+  padding: 10px 24px;
+  border: none;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+}
+
+.btn-primary {
+  background-color: #2563eb;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #1e40af;
+}
+
+.btn-outline {
+  background-color: white;
+  border: 2px solid #2563eb;
+  color: #2563eb;
+}
+
+.btn-outline:hover {
+  background-color: #2563eb;
+  color: white;
+}
+
+.btn-danger {
+  background-color: #e53e3e;
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: #c53030;
+}
+
+.btn-block {
+  display: block;
+  width: 100%;
+  border: none;
+}
+
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.btn-lg {
+  padding: 14px 30px;
+  font-size: 16px;
+}
+
+/* 仪表盘 */
+.dashboard-container {
+  padding: 15px 0;
+}
+
+/* 统计卡片 - 用 table 布局 */
+.stats-section {
+  width: 100%;
+  margin-bottom: 25px;
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 10px 0;
+}
+
+.stats-table td {
+  width: 33%;
+  vertical-align: top;
+  padding: 0;
+}
+
+.stat-card {
+  background: white;
+  padding: 20px;
+  border: 1px solid #c5dbf0;
+  border-left: 4px solid #2563eb;
+}
+
+.stat-primary {
+  border-left-color: #2563eb;
+}
+
+.stat-success {
+  border-left-color: #3b82f6;
+}
+
+.stat-info {
+  border-left-color: #60a5fa;
+}
+
+.stat-icon {
+  font-size: 28px;
+  float: left;
+  margin-right: 12px;
+}
+
+.stat-info-text {
+  overflow: hidden;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #1e3a5f;
+  display: block;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #6b7c93;
+  display: block;
+}
+
+/* 卡片 */
+.card {
+  background: white;
+  border: 1px solid #c5dbf0;
+  margin-bottom: 25px;
+}
+
+.card-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid #c5dbf0;
+}
+
+.card-header h2 {
+  color: #1e3a5f;
+  font-size: 16px;
+  display: inline;
+}
+
+.card-header .badge {
+  float: right;
+}
+
+.card-body {
+  padding: 20px;
+}
+
+/* 徽章 */
+.badge {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.badge-primary {
+  background-color: #dbeafe;
+  color: #2563eb;
+}
+
+.badge-success {
+  background-color: #dbeafe;
+  color: #3b82f6;
+}
+
+/* 上传区 */
+.upload-section {
+  margin-bottom: 25px;
+}
+
+.upload-form {
+  margin: 0;
+}
+
+.upload-options {
+  margin-bottom: 18px;
+}
+
+.radio-label {
+  display: inline;
+  margin-right: 24px;
+  color: #1e3a5f;
+  font-size: 13px;
+}
+
+.radio-label input {
+  margin-right: 5px;
+}
+
+.file-input-wrapper {
+  margin-bottom: 18px;
+}
+
+.file-input-wrapper input[type="file"] {
+  margin-bottom: 10px;
+}
+
+.file-input-label {
+  display: block;
+  padding: 35px;
+  border: 2px dashed #93c5fd;
+  background-color: #f8fbff;
+  text-align: center;
+  color: #1e3a5f;
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.file-hint {
+  font-size: 12px;
+  color: #6b7c93;
+  font-weight: normal;
+  display: block;
+  margin-top: 8px;
+}
+
+/* 文件表格 */
+.file-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.file-table th,
+.file-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid #c5dbf0;
+  font-size: 13px;
+}
+
+.file-table th {
+  background-color: #eff6ff;
+  color: #1e3a5f;
+  font-weight: bold;
+}
+
+.file-table tbody tr:hover {
+  background-color: #f0f6ff;
+}
+
+.file-name {
+  /* 用 inline 替代 flex */
+}
+
+.file-icon {
+  font-size: 14px;
+  margin-right: 5px;
+}
+
+.file-actions {
+  white-space: nowrap;
+}
+
+.file-actions .btn {
+  margin-right: 5px;
+}
+
+/* 空状态 */
+.empty-state {
+  text-align: center;
+  padding: 35px;
+  color: #6b7c93;
+}
+
+.empty-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+}
+
+/* 页脚 */
+.footer {
+  background-color: #1e3a5f;
+  color: #b3ccec;
+  text-align: center;
+  padding: 18px 0;
+  font-size: 12px;
+}
+
+/* 清除浮动 */
+.clearfix:after {
+  content: ".";
+  display: block;
+  height: 0;
+  clear: both;
+  visibility: hidden;
+}
+
+/* 简单响应式 - 不用 media query，用 table 自动布局 */
+
+/* 备案号链接 */
+.footer a {
+  color: inherit;
+  text-decoration: none;
+}
+.footer a:hover {
+  text-decoration: underline;
+}

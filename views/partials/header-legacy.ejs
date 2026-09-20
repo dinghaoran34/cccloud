@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="/css/style-legacy.css?v=2026090521">
+</head>
+<body>
+  <div class="navbar">
+    <div class="nav-container">
+      <table class="nav-table"><tr>
+        <td class="nav-left">
+          <a href="/" class="nav-brand"><span class="logo-icon">[云]</span> CC网盘</a>
+        </td>
+        <td class="nav-right">
+          <% if (currentUser) { %>
+            <a href="/dashboard" class="nav-link">首页</a>
+            <span class="nav-user">欢迎, <%= currentUser.username %></span>
+            <form action="/logout" method="POST" style="display:inline;">
+              <button type="submit" class="btn btn-outline btn-sm">退出</button>
+            </form>
+          <% } else { %>
+            <a href="/login" class="nav-link">登录</a>
+            <a href="/register" class="nav-link">注册</a>
+          <% } %>
+        </td>
+      </tr></table>
+    </div>
+  </div>
+  <div class="main-content">

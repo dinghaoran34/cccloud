@@ -1,0 +1,471 @@
+<%
+  /* 移动版应用外壳（上半）：head + 主题预置 + 顶栏 + 更多抽屉 + 主区容器
+     顶栏（规范 4）：高 56，surface 底 + 1px border；
+       左 汉堡(24) / 返回(24)（应用页）或品牌（访客页）
+       中 标题 / 面包屑（17 Bold，单行省略）
+       右 最多 3 个 44×44 图标按钮（主题 / 搜索 / ⋯更多）
+     更多抽屉（规范 5）：完整列出 首页→文件→我的分享→离线下载→收藏→最近访问→
+       团队→回收站→搜索→上传任务→管理后台（仅管理员）→我的
+     交互（规范 6）：mbToast 短提示 / mbConfirm·mbAlert 自绘圆角弹窗 / mbLoading 环形加载
+                    禁止 alert / confirm / prompt（登录失效统一文案见 mbAuthExpired）。
+     主题（规范 7）：浅色 / 深色 / 跟随系统 三选一，localStorage.cr_theme + html[data-theme]
+   */
+  var _cu = (typeof currentUser !== 'undefined' && currentUser) ? currentUser : null;
+  var _title = (typeof title === 'string' && title) ? title : 'CC网盘';
+  var _navTitle = _title.replace(/^CC网盘\s*[-·]\s*/, '') || '首页';
+  var _name = _cu ? (_cu.nickname || _cu.username || '') : '';
+
+  /* 内联图标库（圆角填充 · currentColor）：几何与 public/icons/*.svg 同一套设计语言。
+     内联目的：单色图标可继承文字色，深色主题下自动可读（<img> 无法继承主题色）。 */
+  var _I = {
+    home: [['M11.06 3.05a1.6 1.6 0 0 1 1.88 0l7.24 5.73c.4.32.64.8.64 1.32v8.5A2.4 2.4 0 0 1 18.42 21H5.58A2.4 2.4 0 0 1 3.18 18.6v-8.5c0-.52.24-1 .64-1.32zM12 14.6h0a1.85 1.85 0 0 1 1.85 1.85v1.5a1.85 1.85 0 0 1-1.85 1.85h0a1.85 1.85 0 0 1-1.85-1.85v-1.5a1.85 1.85 0 0 1 1.85-1.85z']],
+    folder: [['M2.8 7.6A2.8 2.8 0 0 1 5.6 4.8h3.36c.74 0 1.45.29 1.98.8l1.1 1.1h6.36a2.8 2.8 0 0 1 2.8 2.8v7.1a2.8 2.8 0 0 1-2.8 2.8H5.6a2.8 2.8 0 0 1-2.8-2.8z']],
+    share: [
+      ['M17.2 5.8L17.2 5.8A1.1 1.1 0 0 1 16.82 7.31L8.31 12.38A1.1 1.1 0 0 1 6.8 12L6.8 12A1.1 1.1 0 0 1 7.18 10.49L15.69 5.42A1.1 1.1 0 0 1 17.2 5.8Z'],
+      ['M17.2 18.2L17.2 18.2A1.1 1.1 0 0 1 15.69 18.58L7.18 13.51A1.1 1.1 0 0 1 6.8 12L6.8 12A1.1 1.1 0 0 1 8.31 11.62L16.82 16.69A1.1 1.1 0 0 1 17.2 18.2Z'],
+      ['M14.7 5.8a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0zM4.3 12a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0zM14.7 18.2a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0z']
+    ],
+    download: [['M9.2 4.4Q9.2 3.2 10.4 3.2L13.6 3.2Q14.8 3.2 14.8 4.4L14.8 12Q14.8 13.2 16 13.2L17.6 13.2Q18.8 13.2 18 14.09L12.8 19.91Q12 20.8 11.2 19.91L6 14.09Q5.2 13.2 6.4 13.2L8 13.2Q9.2 13.2 9.2 12Z']],
+    upload: [['M9.2 19.6Q9.2 20.8 10.4 20.8L13.6 20.8Q14.8 20.8 14.8 19.6L14.8 12Q14.8 10.8 16 10.8L17.6 10.8Q18.8 10.8 18 9.91L12.8 4.09Q12 3.2 11.2 4.09L6 9.91Q5.2 10.8 6.4 10.8L8 10.8Q9.2 10.8 9.2 12Z']],
+    star: [['M11.58 4.16Q12 3.2 12.42 4.16L13.99 7.72Q14.41 8.68 15.45 8.79L19.32 9.18Q20.37 9.28 19.59 9.98L16.68 12.57Q15.9 13.27 16.12 14.29L16.95 18.09Q17.17 19.12 16.27 18.59L12.91 16.63Q12 16.1 11.09 16.63L7.73 18.59Q6.83 19.12 7.05 18.09L7.88 14.29Q8.1 13.27 7.32 12.57L4.41 9.98Q3.63 9.28 4.68 9.18L8.55 8.79Q9.59 8.68 10.01 7.72Z']],
+    clock: [['M12 4.6a7.4 7.4 0 1 0 0 14.8 7.4 7.4 0 0 0 0-14.8zM12 6.4a5.6 5.6 0 1 0 0 11.2 5.6 5.6 0 0 0 0-11.2zM11.05 8.2Q11.05 8.2 11.05 8.2L12.95 8.2Q12.95 8.2 12.95 8.2L12.95 11.05Q12.95 11.05 12.95 11.05L15.1 11.05Q15.1 11.05 15.1 11.05L15.1 12.95Q15.1 12.95 15.1 12.95L11.05 12.95Q11.05 12.95 11.05 12.95Z']],
+    users: [
+      ['M14.4 8.8a2.8 2.8 0 1 0 5.6 0a2.8 2.8 0 1 0-5.6 0zM17.2 12.8a5.8 5.8 0 0 1 5.8 5.8V21.4H11.4V18.6a5.8 5.8 0 0 1 5.8-5.8z', .45],
+      ['M5.7 8.2a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0-7 0zM9.2 13a6.6 6.6 0 0 1 6.6 6.6V21.4H2.6v-1.8A6.6 6.6 0 0 1 9.2 13z']
+    ],
+    trash: [['M10.25 2.6h3.5a0.75 0.75 0 0 1 0.75 0.75v0a0.75 0.75 0 0 1-0.75 0.75h-3.5a0.75 0.75 0 0 1-0.75-0.75v0a0.75 0.75 0 0 1 0.75-0.75zM4.85 4.6h14.3a1.25 1.25 0 0 1 1.25 1.25v0a1.25 1.25 0 0 1-1.25 1.25h-14.3a1.25 1.25 0 0 1-1.25-1.25v0a1.25 1.25 0 0 1 1.25-1.25zM5.6 8h12.8l-.76 10.4a2.9 2.9 0 0 1-2.89 2.5H9.25a2.9 2.9 0 0 1-2.89-2.5zM10.5 10.6h0a0.9 0.9 0 0 1 0.9 0.9v5.4a0.9 0.9 0 0 1-0.9 0.9h0a0.9 0.9 0 0 1-0.9-0.9v-5.4a0.9 0.9 0 0 1 0.9-0.9zM13.5 10.6h0a0.9 0.9 0 0 1 0.9 0.9v5.4a0.9 0.9 0 0 1-0.9 0.9h0a0.9 0.9 0 0 1-0.9-0.9v-5.4a0.9 0.9 0 0 1 0.9-0.9z']],
+    search: [
+      ['M4.8 10.8a6 6 0 1 0 12 0a6 6 0 1 0-12 0zM6.9 10.8a3.9 3.9 0 1 0 7.8 0a3.9 3.9 0 1 0-7.8 0z'],
+      ['M19.26 14.74L19.26 14.74A1.2 1.2 0 0 1 19.26 16.43L16.43 19.26A1.2 1.2 0 0 1 14.74 19.26L14.74 19.26A1.2 1.2 0 0 1 14.74 17.57L17.57 14.74A1.2 1.2 0 0 1 19.26 14.74Z']
+    ],
+    gear: [
+      ['M5 12a7 7 0 1 0 14 0a7 7 0 1 0-14 0zM9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0z'],
+      ['M18 12.5L18 11.5A1 1 0 0 1 19 10.5L20.2 10.5A1 1 0 0 1 21.2 11.5L21.2 12.5A1 1 0 0 1 20.2 13.5L19 13.5A1 1 0 0 1 18 12.5ZM15.89 16.6L16.6 15.89A1 1 0 0 1 18.01 15.89L18.86 16.74A1 1 0 0 1 18.86 18.15L18.15 18.86A1 1 0 0 1 16.74 18.86L15.89 18.01A1 1 0 0 1 15.89 16.6ZM11.5 18L12.5 18A1 1 0 0 1 13.5 19L13.5 20.2A1 1 0 0 1 12.5 21.2L11.5 21.2A1 1 0 0 1 10.5 20.2L10.5 19A1 1 0 0 1 11.5 18ZM7.4 15.89L8.11 16.6A1 1 0 0 1 8.11 18.01L7.26 18.86A1 1 0 0 1 5.85 18.86L5.14 18.15A1 1 0 0 1 5.14 16.74L5.99 15.89A1 1 0 0 1 7.4 15.89ZM6 11.5L6 12.5A1 1 0 0 1 5 13.5L3.8 13.5A1 1 0 0 1 2.8 12.5L2.8 11.5A1 1 0 0 1 3.8 10.5L5 10.5A1 1 0 0 1 6 11.5ZM8.11 7.4L7.4 8.11A1 1 0 0 1 5.99 8.11L5.14 7.26A1 1 0 0 1 5.14 5.85L5.85 5.14A1 1 0 0 1 7.26 5.14L8.11 5.99A1 1 0 0 1 8.11 7.4ZM12.5 6L11.5 6A1 1 0 0 1 10.5 5L10.5 3.8A1 1 0 0 1 11.5 2.8L12.5 2.8A1 1 0 0 1 13.5 3.8L13.5 5A1 1 0 0 1 12.5 6ZM16.6 8.11L15.89 7.4A1 1 0 0 1 15.89 5.99L16.74 5.14A1 1 0 0 1 18.15 5.14L18.86 5.85A1 1 0 0 1 18.86 7.26L18.01 8.11A1 1 0 0 1 16.6 8.11Z']
+    ],
+    user: [['M8.2 8a3.8 3.8 0 1 0 7.6 0a3.8 3.8 0 1 0-7.6 0zM12 12.8a7.4 7.4 0 0 1 7.4 7.4V21.4H4.6v-1.2a7.4 7.4 0 0 1 7.4-7.4z']],
+    /* 顶栏 */
+    burger: [['M4.6 5.6h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 10.5h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 15.4h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3z']],
+    more: [['M4.3 12a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0-3.8 0zM10.1 12a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0-3.8 0zM15.9 12a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0-3.8 0z']],
+    logout: [['M6.6 6.6a1.2 1.2 0 0 1 1.7 0L12 10.3l3.7-3.7a1.2 1.2 0 1 1 1.7 1.7L13.7 12l3.7 3.7a1.2 1.2 0 0 1-1.7 1.7L12 13.7l-3.7 3.7a1.2 1.2 0 0 1-1.7-1.7L10.3 12 6.6 8.3a1.2 1.2 0 0 1 0-1.7z']],
+    check: [['M9.3 16.7a1.35 1.35 0 0 1-.95-.39l-3.4-3.4a1.35 1.35 0 0 1 1.9-1.9l2.45 2.44 6.3-6.3a1.35 1.35 0 1 1 1.9 1.9l-7.25 7.26a1.35 1.35 0 0 1-.95.39z']],
+    warn: [['M10.85 5.51Q12 3.4 13.15 5.51L20.05 18.09Q21.2 20.2 18.8 20.2L5.2 20.2Q2.8 20.2 3.95 18.09ZM12 8.6h0a0.95 0.95 0 0 1 0.95 0.95v4.5a0.95 0.95 0 0 1-0.95 0.95h0a0.95 0.95 0 0 1-0.95-0.95v-4.5a0.95 0.95 0 0 1 0.95-0.95zM10.85 17.2a1.15 1.15 0 1 0 2.3 0a1.15 1.15 0 1 0-2.3 0z']]
+  };
+  function _ico(k, s, rule) {
+    var parts = (_I[k] || []).map(function (p) {
+      return '<path d="' + p[0] + '"' + (p[1] ? ' opacity="' + p[1] + '"' : '') + '/>';
+    }).join('');
+    return '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s + '" fill="currentColor"'
+      + (rule === false ? '' : ' fill-rule="evenodd"') + ' aria-hidden="true">' + parts + '</svg>';
+  }
+  /* 品牌标记：圆角方块 + 镂空 C（CC网盘 首字母，原创几何） */
+  var _brandMark = function (s) {
+    return '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s + '" aria-hidden="true">'
+      + '<path fill="var(--cr-primary)" fill-rule="evenodd" d="M7.6 2.4h8.8a5.2 5.2 0 0 1 5.2 5.2v8.8a5.2 5.2 0 0 1-5.2 5.2h-8.8a5.2 5.2 0 0 1-5.2-5.2V7.6a5.2 5.2 0 0 1 5.2-5.2zM16.26 15.32A5.4 5.4 0 1 1 16.26 8.68L14.64 9.94A3.35 3.35 0 1 0 14.64 14.06Z"/></svg>';
+  };
+  /* 外观切换三态（浅色 / 深色 / 跟随系统）：原创几何，圆角填充 + 极简线性细节 */
+  var _icoSun = '<svg class="cr-i-sun" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
+    + '<path fill-rule="evenodd" d="M12 7.4a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2z"/>'
+    + '<g stroke="currentColor" stroke-width="2" stroke-linecap="round">'
+    + '<path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M5.2 18.8l1.6-1.6M17.2 6.8l1.6-1.6"/></g></svg>';
+  var _icoMoon = '<svg class="cr-i-moon" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true">'
+    + '<path d="M10.34 3.36A8.8 8.8 0 1 0 20.64 13.66A7.4 7.4 0 0 1 10.34 3.36z"/></svg>';
+  var _icoAuto = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
+    + '<path d="M12 4.4a7.6 7.6 0 1 0 0 15.2z"/>'
+    + '<circle cx="12" cy="12" r="7.6" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+
+  /* 导航条目（顺序 / 命名与桌面侧边栏及安卓端一致；goto = 移动版同名面板 id）
+     svg = 新风格内联图标；icon 保留为 <img> 回退路径 */
+  var _navItems = [
+    { key: 'home',     label: '首页',     href: '/dashboard',           goto: 'home',  icon: '/icons/home.svg',     svg: _ico('home', 20) },
+    { key: 'files',    label: '文件',     href: '/dashboard?tab=files', goto: 'files', icon: '/icons/folder.svg',   svg: _ico('folder', 20) },
+    { key: 'shares',   label: '我的分享', href: '/shares',              icon: '/icons/share.svg',    svg: _ico('share', 20) },
+    { key: 'offline',  label: '离线下载', href: '/offline',             icon: '/icons/download.svg', svg: _ico('download', 20) },
+    { key: 'starred',  label: '收藏',     href: '/dashboard?tab=starred', icon: '/icons/file-generic.svg', svg: _ico('star', 20) },
+    { key: 'recent',   label: '最近访问', href: '/dashboard?tab=recent', icon: '/icons/file-generic.svg', svg: _ico('clock', 20) },
+    { key: 'teams',    label: '团队',     href: '/dashboard?tab=teams', goto: 'team',  icon: '/icons/users.svg',    svg: _ico('users', 20) },
+    { key: 'trash',    label: '回收站',   href: '/trash',               icon: '/icons/trash.svg',    svg: _ico('trash', 20) },
+    { key: 'search',   label: '搜索',     href: '/search',              icon: '/icons/search.svg',   svg: _ico('search', 20) },
+    { key: 'transfer', label: '上传任务', href: '/dashboard?tab=files', goto: 'files', icon: '/icons/upload.svg',   svg: _ico('upload', 20) },
+    { key: 'admin',    label: '管理后台', href: '/admin',               icon: '/icons/gear.svg',     svg: _ico('gear', 20), admin: true },
+    { key: 'me',       label: '我的',     href: '/dashboard?tab=me',    goto: 'me',    icon: '/icons/user.svg',     svg: _ico('user', 20) }
+  ];
+%>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title><%= title %></title>
+  <link rel="stylesheet" href="/css/style-mobile.css?v=2026091905">
+  <script>
+    /* 主题预置：避免刷新时闪白/闪黑（与桌面版一致：默认跟随系统，手动选择存 localStorage.cr_theme） */
+    (function () {
+      try {
+        var t = localStorage.getItem('cr_theme');
+        if (t === 'dark' || t === 'light') { document.documentElement.setAttribute('data-theme', t); }
+      } catch (e) { }
+    })();
+  </script>
+</head>
+<body>
+  <%- include('cr-app-banner') %>
+  <nav class="navbar">
+    <!-- 左：应用页汉堡（打开更多抽屉）/ 访客页品牌 -->
+    <button type="button" class="nav-icon-btn nav-burger" id="mbBurgerBtn" title="导航菜单" aria-label="导航菜单" aria-expanded="false" aria-controls="mbDrawer">
+      <%- _ico('burger', 24) %>
+    </button>
+    <a href="<%= _cu ? '/dashboard' : '/' %>" class="nav-brand">
+      <span class="logo-icon"><%- _brandMark(24) %></span>
+      <span>CC网盘</span>
+    </a>
+
+    <!-- 中：标题（应用页显示，17 Bold 单行省略） -->
+    <div class="nav-title" id="mbNavTitle"
+         data-title-home="首页" data-title-files="文件" data-title-team="团队" data-title-me="我的"><%= _navTitle %></div>
+
+    <!-- 右：图标按钮（≤3 个，各 44×44）：主题 / 搜索 / ⋯更多 -->
+    <div class="nav-actions">
+      <button type="button" class="nav-theme-btn" id="mbThemeBtn" title="主题：浅色 / 深色 / 跟随系统" aria-label="主题：浅色 / 深色 / 跟随系统" aria-haspopup="dialog">
+        <%- _icoMoon %>
+        <%- _icoSun %>
+      </button>
+      <% if (_cu) { %>
+        <a href="/search" class="nav-icon-btn" title="搜索" aria-label="搜索">
+          <%- _ico('search', 24) %>
+        </a>
+        <button type="button" class="nav-icon-btn" id="mbMoreBtn" title="更多" aria-label="更多" aria-haspopup="dialog" aria-expanded="false" aria-controls="mbDrawer">
+          <%- _ico('more', 24) %>
+        </button>
+      <% } else { %>
+        <a href="/login" class="btn-logout">登录</a>
+        <a href="/register" class="btn-logout btn-logout-primary">注册</a>
+      <% } %>
+    </div>
+  </nav>
+
+  <% if (_cu) { %>
+  <!-- 更多抽屉：完整导航（顺序 / 命名与桌面侧边栏一致） -->
+  <div class="mb-drawer-mask" id="mbDrawerMask"></div>
+  <aside class="mb-drawer" id="mbDrawer" role="dialog" aria-modal="true" aria-label="导航">
+    <div class="mb-drawer-head">
+      <%- _brandMark(28) %>
+      <div class="mb-drawer-head-info">
+        <b><%= _name %></b>
+        <span>UID: <%= _cu.uid %></span>
+      </div>
+    </div>
+    <nav class="mb-drawer-nav">
+      <% _navItems.forEach(function (it) { %>
+        <% if (it.admin && _cu.role !== 'admin') { return; } %>
+        <a class="mb-drawer-item" href="<%= it.href %>"<% if (it.goto) { %> data-goto="<%= it.goto %>"<% } %>>
+          <% if (it.svg) { %><%- it.svg %><% } else { %><img src="<%= it.icon %>" width="20" height="20" alt=""><% } %>
+          <span><%= it.label %></span>
+        </a>
+      <% }) %>
+    </nav>
+    <div class="mb-drawer-foot">
+      <form action="/logout" method="POST">
+        <button type="submit" class="mb-drawer-item is-danger">
+          <%- _ico('logout', 20) %><span>退出登录</span>
+        </button>
+      </form>
+    </div>
+  </aside>
+  <% } %>
+
+  <!-- 主题三选一（浅色 / 深色 / 跟随系统） -->
+  <div class="modal-overlay" id="mbThemeSheet" style="align-items:flex-end;">
+    <div class="fm-sheet" role="dialog" aria-modal="true" aria-label="主题">
+      <div class="fm-name">主题</div>
+      <button type="button" class="fm-item" data-mb-theme="light"><span class="fm-i"><%- _icoSun %></span><span>浅色</span><span class="fm-check"></span></button>
+      <button type="button" class="fm-item" data-mb-theme="dark"><span class="fm-i"><%- _icoMoon %></span><span>深色</span><span class="fm-check"></span></button>
+      <button type="button" class="fm-item" data-mb-theme="system"><span class="fm-i"><%- _icoAuto %></span><span>跟随系统</span><span class="fm-check"></span></button>
+      <button type="button" class="fm-cancel" data-mb-theme-close>取消</button>
+    </div>
+  </div>
+
+  <script>
+  /* ===================== 移动版公共交互（主题 / 抽屉 / 面板 / 提示） ===================== */
+  (function () {
+    var KEY = 'cr_theme';
+    function root() { return document.documentElement; }
+    function readTheme() {
+      try { var v = localStorage.getItem(KEY); return (v === 'dark' || v === 'light') ? v : null; }
+      catch (e) { return null; }
+    }
+    function applyTheme(v) {
+      if (v) { root().setAttribute('data-theme', v); } else { root().removeAttribute('data-theme'); }
+    }
+    function systemDark() { return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); }
+    function isDark() { var t = readTheme(); if (t === 'dark') { return true; } if (t === 'light') { return false; } return systemDark(); }
+    function getTheme() { return readTheme() || 'system'; }
+    function setTheme(v) {
+      if (v === 'light' || v === 'dark') { try { localStorage.setItem(KEY, v); } catch (e) { } applyTheme(v); }
+      else { try { localStorage.removeItem(KEY); } catch (e) { } applyTheme(null); }
+      syncThemeUI();
+    }
+    /* 与桌面版一致的全局接口 */
+    window.crSetTheme = setTheme;
+    window.crGetTheme = getTheme;
+    window.crIsDark = isDark;
+    window.crToggleTheme = function () { setTheme(isDark() ? 'light' : 'dark'); };
+
+    var sheet = document.getElementById('mbThemeSheet');
+    function syncThemeUI() {
+      var cur = getTheme();
+      var items = document.querySelectorAll('#mbThemeSheet [data-mb-theme]');
+      for (var i = 0; i < items.length; i++) {
+        var on = items[i].getAttribute('data-mb-theme') === cur;
+        items[i].classList.toggle('is-active', on);
+        var ck = items[i].querySelector('.fm-check');
+        if (ck) { ck.textContent = on ? '✓' : ''; }
+      }
+      var btn = document.getElementById('mbThemeBtn');
+      if (btn) { btn.setAttribute('aria-pressed', isDark() ? 'true' : 'false'); }
+    }
+    function openSheet() { if (sheet) { sheet.style.display = 'flex'; syncThemeUI(); } }
+    function closeSheet() { if (sheet) { sheet.style.display = 'none'; } }
+    var themeBtn = document.getElementById('mbThemeBtn');
+    if (themeBtn) { themeBtn.addEventListener('click', openSheet); }
+    if (sheet) {
+      sheet.addEventListener('click', function (e) {
+        if (e.target === sheet || e.target.closest('[data-mb-theme-close]')) { closeSheet(); return; }
+        var opt = e.target.closest ? e.target.closest('[data-mb-theme]') : null;
+        if (opt) { setTheme(opt.getAttribute('data-mb-theme')); closeSheet(); }
+      });
+    }
+    /* 未手动选择时跟随系统变化 */
+    if (window.matchMedia) {
+      var mq = window.matchMedia('(prefers-color-scheme: dark)');
+      var onChange = function () { if (!readTheme()) { applyTheme(null); syncThemeUI(); } };
+      if (mq.addEventListener) { mq.addEventListener('change', onChange); } else if (mq.addListener) { mq.addListener(onChange); }
+    }
+    syncThemeUI();
+
+    /* ---------- Toast 短提示（替代 alert） ---------- */
+    var toastEl = null, toastTimer = null;
+    window.mbToast = function (msg, kind) {
+      if (!toastEl) {
+        toastEl = document.createElement('div');
+        toastEl.className = 'mb-toast';
+        toastEl.setAttribute('role', 'status');
+        document.body.appendChild(toastEl);
+      }
+      toastEl.textContent = msg || '';
+      toastEl.className = 'mb-toast is-show' + (kind === 'ok' ? ' is-ok' : (kind === 'err' ? ' is-err' : ''));
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () { toastEl.className = 'mb-toast'; }, 2200);
+    };
+
+    /* ---------- 加载遮罩（品牌色环形指示 + 半透明遮罩） ---------- */
+    var loadEl = null;
+    window.mbLoading = function (show) {
+      if (!loadEl) {
+        loadEl = document.createElement('div');
+        loadEl.className = 'mb-loading';
+        var sp = document.createElement('div');
+        sp.className = 'mb-spinner';
+        loadEl.appendChild(sp);
+        document.body.appendChild(loadEl);
+      }
+      loadEl.classList.toggle('is-show', !!show);
+    };
+
+    /* ---------- 自绘圆角确认弹窗（替代 confirm，危险操作主按钮红色） ---------- */
+    var cfEl = null, cfOk = null;
+    function ensureConfirm() {
+      if (cfEl) { return cfEl; }
+      cfEl = document.createElement('div');
+      cfEl.className = 'modal-overlay';
+      cfEl.id = 'mbConfirmModal';
+      var box = document.createElement('div');
+      box.className = 'modal-content';
+      var h = document.createElement('h3');
+      h.id = 'mbConfirmTitle';
+      var p = document.createElement('p');
+      p.className = 'mb-confirm-msg';
+      p.id = 'mbConfirmMsg';
+      var acts = document.createElement('div');
+      acts.className = 'modal-actions';
+      cfOk = document.createElement('button');
+      cfOk.type = 'button';
+      cfOk.className = 'btn btn-primary';
+      cfOk.id = 'mbConfirmOk';
+      cfOk.textContent = '确定';
+      var no = document.createElement('button');
+      no.type = 'button';
+      no.className = 'btn btn-outline';
+      no.id = 'mbConfirmCancel';
+      no.textContent = '取消';
+      acts.appendChild(cfOk); acts.appendChild(no);
+      box.appendChild(h); box.appendChild(p); box.appendChild(acts);
+      cfEl.appendChild(box);
+      document.body.appendChild(cfEl);
+      no.addEventListener('click', function () { cfEl.style.display = 'none'; });
+      cfEl.addEventListener('click', function (e) { if (e.target === cfEl) { cfEl.style.display = 'none'; } });
+      return cfEl;
+    }
+    window.mbConfirm = function (opts) {
+      opts = opts || {};
+      var el = ensureConfirm();
+      document.getElementById('mbConfirmTitle').textContent = opts.title || '请确认';
+      document.getElementById('mbConfirmMsg').textContent = opts.message || '';
+      cfOk.textContent = opts.okText || '确定';
+      cfOk.className = 'btn ' + (opts.danger ? 'btn-danger' : 'btn-primary');
+      cfOk.onclick = function () {
+        el.style.display = 'none';
+        if (typeof opts.onOk === 'function') { opts.onOk(); }
+      };
+      el.style.display = 'flex';
+    };
+
+    /* ---------- 自绘单按钮提示弹窗（替代 alert；危险操作可传 danger） ---------- */
+    var alEl = null, alOk = null;
+    function ensureAlert() {
+      if (alEl) { return alEl; }
+      alEl = document.createElement('div');
+      alEl.className = 'modal-overlay';
+      alEl.id = 'mbAlertModal';
+      var box = document.createElement('div');
+      box.className = 'modal-content';
+      var h = document.createElement('h3');
+      h.id = 'mbAlertTitle';
+      var p = document.createElement('p');
+      p.id = 'mbAlertMsg';
+      var acts = document.createElement('div');
+      acts.className = 'modal-actions';
+      alOk = document.createElement('button');
+      alOk.type = 'button';
+      alOk.className = 'btn btn-primary';
+      alOk.id = 'mbAlertOk';
+      alOk.textContent = '知道了';
+      acts.appendChild(alOk);
+      box.appendChild(h); box.appendChild(p); box.appendChild(acts);
+      alEl.appendChild(box);
+      document.body.appendChild(alEl);
+      alOk.addEventListener('click', function () { alEl.style.display = 'none'; });
+      alEl.addEventListener('click', function (e) { if (e.target === alEl) { alEl.style.display = 'none'; } });
+      return alEl;
+    }
+    window.mbAlert = function (msg, title) {
+      var el = ensureAlert();
+      document.getElementById('mbAlertTitle').textContent = title || '提示';
+      document.getElementById('mbAlertMsg').textContent = msg || '';
+      el.style.display = 'flex';
+      try { alOk.focus(); } catch (e) { }
+    };
+    /* 与桌面版同名接口：app.js 出现 window.crAlert 时走自绘弹窗（不再回退原生 alert） */
+    window.crAlert = function (msg, title) { window.mbAlert(msg, title); return Promise.resolve(true); };
+
+    /* ---------- 登录状态失效统一提示（逐字文案） ---------- */
+    window.mbAuthExpired = function () { window.mbToast('登录状态已失效，请重新登录', 'err'); };
+    /* 拦截 fetch 的 401（移动版所有 JSON 接口调用） */
+    if (window.fetch) {
+      var _mbFetch = window.fetch;
+      window.fetch = function () {
+        return _mbFetch.apply(this, arguments).then(function (resp) {
+          if (resp && resp.status === 401 && !resp.__mbAuthNotified) { resp.__mbAuthNotified = true; window.mbAuthExpired(); }
+          return resp;
+        });
+      };
+    }
+
+    /* ---------- 声明式确认：表单上的 data-mb-confirm 拦截提交（替代 confirm） ---------- */
+    document.addEventListener('submit', function (e) {
+      var f = e.target;
+      if (!f || !f.getAttribute || !f.getAttribute('data-mb-confirm')) { return; }
+      if (f.getAttribute('data-mb-confirmed') === '1') { f.removeAttribute('data-mb-confirmed'); return; }
+      e.preventDefault();
+      e.stopPropagation();
+      window.mbConfirm({
+        title: f.getAttribute('data-mb-confirm-title') || '请确认',
+        message: f.getAttribute('data-mb-confirm'),
+        okText: f.getAttribute('data-mb-confirm-ok') || '确定',
+        danger: f.getAttribute('data-mb-confirm-danger') === '1',
+        onOk: function () {
+          f.setAttribute('data-mb-confirmed', '1');
+          if (f.requestSubmit) { f.requestSubmit(); } else { f.submit(); }
+        }
+      });
+    }, true);
+
+    /* ---------- 更多抽屉 ---------- */
+    var drawer = document.getElementById('mbDrawer');
+    var mask = document.getElementById('mbDrawerMask');
+    function openDrawer() {
+      if (!drawer) { return; }
+      drawer.classList.add('is-open');
+      if (mask) { mask.classList.add('is-open'); }
+      var b = document.getElementById('mbBurgerBtn'), m = document.getElementById('mbMoreBtn');
+      if (b) { b.setAttribute('aria-expanded', 'true'); }
+      if (m) { m.setAttribute('aria-expanded', 'true'); }
+    }
+    function closeDrawer() {
+      if (!drawer) { return; }
+      drawer.classList.remove('is-open');
+      if (mask) { mask.classList.remove('is-open'); }
+      var b = document.getElementById('mbBurgerBtn'), m = document.getElementById('mbMoreBtn');
+      if (b) { b.setAttribute('aria-expanded', 'false'); }
+      if (m) { m.setAttribute('aria-expanded', 'false'); }
+    }
+    window.mbCloseDrawer = closeDrawer;
+    var burger = document.getElementById('mbBurgerBtn'), more = document.getElementById('mbMoreBtn');
+    if (burger) { burger.addEventListener('click', function () { drawer && drawer.classList.contains('is-open') ? closeDrawer() : openDrawer(); }); }
+    if (more) { more.addEventListener('click', function () { drawer && drawer.classList.contains('is-open') ? closeDrawer() : openDrawer(); }); }
+    if (mask) { mask.addEventListener('click', closeDrawer); }
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' || e.keyCode === 27) { closeDrawer(); closeSheet(); }
+    });
+
+    /* ---------- 面板切换（底部 Tab 4 项 + 抽屉/快捷卡 data-goto） ---------- */
+    function paneExists(tab) { return !!document.getElementById('mbp-' + tab); }
+    window.mbShowPane = function (tab) {
+      if (!paneExists(tab)) { return false; }
+      var panes = document.querySelectorAll('.mb-pane');
+      for (var i = 0; i < panes.length; i++) { panes[i].hidden = (panes[i].id !== 'mbp-' + tab); }
+      var tabs = document.querySelectorAll('#mbTabbar .mb-tab');
+      for (var j = 0; j < tabs.length; j++) {
+        tabs[j].classList.toggle('active', tabs[j].getAttribute('data-tab') === tab);
+      }
+      var t = document.getElementById('mbNavTitle');
+      if (t) { var nv = t.getAttribute('data-title-' + tab); if (nv) { t.textContent = nv; } }
+      var items = document.querySelectorAll('.mb-drawer-item[data-goto]');
+      for (var k = 0; k < items.length; k++) {
+        items[k].classList.toggle('is-active', items[k].getAttribute('data-goto') === tab);
+      }
+      window.scrollTo(0, 0);
+      return true;
+    };
+
+    function init() {
+      document.addEventListener('click', function (e) {
+        if (!e.target.closest) { return; }
+        var el = e.target.closest('[data-goto]');
+        if (!el) { return; }
+        if (!paneExists(el.getAttribute('data-goto'))) { return; }   /* 非本页面板 → 正常跳转 */
+        e.preventDefault();
+        closeDrawer();
+        window.mbShowPane(el.getAttribute('data-goto'));
+      });
+      var tabs = document.querySelectorAll('#mbTabbar .mb-tab');
+      for (var i = 0; i < tabs.length; i++) {
+        tabs[i].addEventListener('click', function (ev) {
+          window.mbShowPane(ev.currentTarget.getAttribute('data-tab'));
+        });
+      }
+      /* 支持从其它页面带 ?tab= 进入（files / teams / account 等映射到同名面板） */
+      var m = /[?&]tab=([^&]+)/.exec(window.location.search);
+      var map = { files: 'files', teams: 'team', team: 'team', account: 'me', me: 'me' };
+      var tab = m ? map[decodeURIComponent(m[1])] : null;
+      if (!tab || !window.mbShowPane(tab)) {
+        var first = document.querySelector('.mb-pane');
+        if (first) { window.mbShowPane(first.id.replace('mbp-', '')); }
+      }
+    }
+    if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { init(); }
+  })();
+  </script>
+  <main class="main-content">

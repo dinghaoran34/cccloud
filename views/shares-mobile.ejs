@@ -1,0 +1,147 @@
+<%
+  /* 我的分享（移动版）：列表（名称/类型/提取码/有效期/下载次数/创建时间）
+     + 复制链接 / 复制提取码 / 打开 / 取消分享（危险确认）
+     shares 由 server.js 的 GET /shares 提供（与桌面版同一数据结构，接口未改动） */
+  function fmtSize(bytes) {
+    if (bytes === null || bytes === undefined) return '—';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  }
+%>
+<%- include('partials/header-mobile') %>
+
+<div class="mb-toolbar">
+  <span class="mb-toolbar-sub">共 <%= shareCount %> 个分享</span>
+  <span class="mb-spring"></span>
+  <button type="button" class="btn btn-outline btn-sm" id="shRefresh">刷新</button>
+  <a class="btn btn-outline btn-sm" href="/dashboard">返回文件</a>
+</div>
+
+<div class="card">
+  <% if (!shares || !shares.length) { %>
+    <div class="card-body"><div class="empty-state">
+      <div class="empty-icon"><img src="/icons/share.svg" width="24" height="24" alt=""></div>
+      <p>暂无内容</p>
+      <span class="empty-desc">还没有创建任何分享，可在文件条目的「更多操作 → 分享」中创建</span>
+      <a class="btn btn-primary" href="/dashboard">去创建分享</a>
+    </div></div>
+  <% } else { %>
+    <div class="card-body" style="padding:0;" id="shBody">
+      <% shares.forEach(function(s) { %>
+        <div class="mb-item" data-token="<%= s.token %>" data-url="<%= s.url %>" data-pwd="<%= s.password %>" data-name="<%= s.name %>">
+          <div class="mb-item-main">
+            <span class="file-icon <%= s.kind === 'folder' ? 'mb-ico--folder' : 'mb-ico--other' %>">
+              <img src="<%= s.kind === 'folder' ? '/icons/folder.svg' : '/icons/file-generic.svg' %>" width="20" height="20" alt="">
+            </span>
+            <div class="file-info">
+              <a href="<%= s.url %>" target="_blank" rel="noopener" title="<%= s.name %>"><%= s.name %></a>
+              <div class="file-meta"><%= s.kind === 'folder' ? '文件夹' : ('文件 ' + fmtSize(s.size)) %> · 下载 <%= s.download_count %> 次</div>
+            </div>
+          </div>
+          <div class="mb-row-ops" style="justify-content:flex-start;">
+            <% if (s.password) { %>
+              <span class="mb-tag is-primary" data-shpwd-text>提取码 <%= s.password %></span>
+            <% } else { %>
+              <span class="mb-tag is-muted">无提取码</span>
+            <% } %>
+            <% if (s.expired) { %>
+              <span class="mb-tag is-danger">已过期</span>
+            <% } else if (s.expires_at) { %>
+              <span class="mb-tag is-muted"><%= s.expires_at %> 到期</span>
+            <% } else { %>
+              <span class="mb-tag is-success">永久有效</span>
+            <% } %>
+            <span class="mb-tag is-muted">创建于 <%= s.created_at %></span>
+          </div>
+          <div class="mb-row-ops">
+            <button type="button" class="btn btn-outline btn-sm" data-shcopy>复制链接</button>
+            <% if (s.password) { %><button type="button" class="btn btn-outline btn-sm" data-shcopypwd>复制提取码</button><% } %>
+            <a class="btn btn-outline btn-sm" href="<%= s.url %>" target="_blank" rel="noopener">打开</a>
+            <button type="button" class="btn btn-danger btn-sm" data-shrevoke>取消分享</button>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+</div>
+
+<script>
+(function () {
+  function $(id) { return document.getElementById(id); }
+  function copyText(text) {
+    return new Promise(function (resolve) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { resolve(true); }).catch(function () { resolve(fallback()); });
+        return;
+      }
+      resolve(fallback());
+      function fallback() {
+        try {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          var ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          return ok;
+        } catch (e) { return false; }
+      }
+    });
+  }
+
+  var body = $('shBody');
+  if (body) {
+    body.addEventListener('click', function (e) {
+      var item = e.target.closest ? e.target.closest('.mb-item[data-token]') : null;
+      if (!item) return;
+      var token = item.dataset.token;
+      var name = item.dataset.name || '';
+      if (e.target.closest('[data-shcopy]')) {
+        copyText(window.location.origin + item.dataset.url).then(function (ok) {
+          window.mbToast(ok ? '链接已复制' : '复制失败，请手动复制', ok ? 'ok' : 'err');
+        });
+        return;
+      }
+      if (e.target.closest('[data-shcopypwd]')) {
+        copyText(item.dataset.pwd || '').then(function (ok) {
+          window.mbToast(ok ? '提取码已复制' : '复制失败，请手动复制', ok ? 'ok' : 'err');
+        });
+        return;
+      }
+      if (e.target.closest('[data-shrevoke]')) {
+        window.mbConfirm({
+          title: '取消分享',
+          message: '确定取消「' + name + '」的分享链接？取消后该链接立即失效。',
+          okText: '确认取消',
+          danger: true,
+          onOk: function () {
+            if (window.mbLoading) { window.mbLoading(true); }
+            fetch('/share/revoke-by-token', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: token })
+            }).then(function (r) { return r.json(); }).then(function (j) {
+              if (window.mbLoading) { window.mbLoading(false); }
+              if (!j || !j.ok) { window.mbAlert((j && j.error) || '取消失败'); return; }
+              item.parentNode.removeChild(item);
+              window.mbToast('已取消分享', 'ok');
+            }).catch(function (err) {
+              if (window.mbLoading) { window.mbLoading(false); }
+              window.mbAlert('取消失败：' + err.message);
+            });
+          }
+        });
+      }
+    });
+  }
+  var refresh = $('shRefresh');
+  if (refresh) { refresh.addEventListener('click', function () { location.reload(); }); }
+})();
+</script>
+
+<%- include('partials/footer-mobile') %>

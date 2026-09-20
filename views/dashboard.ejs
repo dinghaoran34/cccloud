@@ -1,0 +1,2921 @@
+<%
+function formatFileSize(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+}
+
+function fileIconPath(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  const types = {
+    pdf: 'pdf', doc: 'doc', docx: 'doc',
+    xls: 'xls', xlsx: 'xls',
+    ppt: 'ppt', pptx: 'ppt',
+    jpg: 'img', jpeg: 'img', png: 'img', gif: 'img', bmp: 'img', webp: 'img', svg: 'img',
+    mp3: 'audio', wav: 'audio', flac: 'audio', m4a: 'audio', ogg: 'audio',
+    mp4: 'video', avi: 'video', mkv: 'video', mov: 'video', wmv: 'video', webm: 'video',
+    zip: 'archive', rar: 'archive', '7z': 'archive', tar: 'archive', gz: 'archive',
+    txt: 'text', md: 'text', log: 'text',
+    js: 'code', html: 'code', css: 'code', py: 'code', json: 'code', ts: 'code', java: 'code',
+    exe: 'exe', msi: 'exe', bat: 'exe', apk: 'exe'
+  };
+  return '/icons/file-' + (types[ext] || 'generic') + '.svg';
+}
+
+/* 文件类型 → 彩色图标底色（folder/image/video/doc/archive/other） */
+function fileTint(filename) {
+  const ext = String(filename || '').split('.').pop().toLowerCase();
+  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'].indexOf(ext) >= 0) return 'image';
+  if (['mp4', 'avi', 'mkv', 'mov', 'wmv', 'webm', 'mp3', 'wav', 'flac', 'm4a', 'ogg'].indexOf(ext) >= 0) return 'video';
+  if (['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md', 'log', 'csv'].indexOf(ext) >= 0) return 'doc';
+  if (['zip', 'rar', '7z', 'tar', 'gz'].indexOf(ext) >= 0) return 'archive';
+  return 'other';
+}
+
+/* 时间字符串 → 时间戳（毫秒），供前端排序/详情面板使用 */
+function tsOf(v) {
+  const t = new Date(String(v == null ? '' : v).replace(' ', 'T')).getTime();
+  return isNaN(t) ? 0 : t;
+}
+%>
+<% var _ownerName = currentUser.nickname || currentUser.username; %>
+
+<%- include('partials/cr-shell-head', { crActive: 'home' }) %>
+
+  <header class="cr-topbar">
+    <button type="button" class="cr-hamburger" data-cr-drawer-open title="打开菜单" aria-label="打开菜单">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M4.6 5.6h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 10.5h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 15.4h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3z"/></svg>
+    </button>
+
+    <!-- 面包屑（跟随当前文件夹层级） -->
+    <nav class="cr-crumb" id="crCrumb" aria-label="面包屑">
+      <a class="cr-crumb-item<%= currentFolderId ? '' : ' is-current' %>" href="/dashboard">全部文件</a>
+      <% folderPath.forEach(function(f) { %>
+        <span class="cr-crumb-sep">/</span>
+        <% if (f.id === currentFolderId) { %>
+          <span class="cr-crumb-item is-current"><%= f.name %></span>
+        <% } else { %>
+          <a class="cr-crumb-item" href="/dashboard?folder=<%= f.id %>"><%= f.name %></a>
+        <% } %>
+      <% }) %>
+    </nav>
+
+    <div class="cr-top-actions">
+      <form class="cr-search" action="/search" method="GET" role="search">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M4.8 10.8a6 6 0 1 0 12 0a6 6 0 1 0-12 0zM6.9 10.8a3.9 3.9 0 1 0 7.8 0a3.9 3.9 0 1 0-7.8 0z"/><path d="M19.26 14.74L19.26 14.74A1.2 1.2 0 0 1 19.26 16.43L16.43 19.26A1.2 1.2 0 0 1 14.74 19.26L14.74 19.26A1.2 1.2 0 0 1 14.74 17.57L17.57 14.74A1.2 1.2 0 0 1 19.26 14.74Z"/></svg>
+        <input type="search" name="q" placeholder="搜索文件…" autocomplete="off" aria-label="搜索文件">
+      </form>
+
+      <div class="cr-viewtoggle" id="panViewToggle" role="group" aria-label="视图切换">
+        <button type="button" class="cr-vt-btn pan-view-btn is-active" data-view="grid" title="网格视图" aria-label="网格视图">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M5.8 3.6h4.2a2.2 2.2 0 0 1 2.2 2.2v4.2a2.2 2.2 0 0 1-2.2 2.2H5.8a2.2 2.2 0 0 1-2.2-2.2V5.8a2.2 2.2 0 0 1 2.2-2.2zM14 3.6h4.2a2.2 2.2 0 0 1 2.2 2.2v4.2a2.2 2.2 0 0 1-2.2 2.2H14a2.2 2.2 0 0 1-2.2-2.2V5.8A2.2 2.2 0 0 1 14 3.6zM5.8 11.8h4.2a2.2 2.2 0 0 1 2.2 2.2v4.2a2.2 2.2 0 0 1-2.2 2.2H5.8a2.2 2.2 0 0 1-2.2-2.2V14a2.2 2.2 0 0 1 2.2-2.2zM14 11.8h4.2a2.2 2.2 0 0 1 2.2 2.2v4.2a2.2 2.2 0 0 1-2.2 2.2H14a2.2 2.2 0 0 1-2.2-2.2V14a2.2 2.2 0 0 1 2.2-2.2z"/></svg>
+        </button>
+        <button type="button" class="cr-vt-btn pan-view-btn" data-view="list" title="列表视图" aria-label="列表视图">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M4.6 5.6h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 10.5h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 15.4h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3z"/></svg>
+        </button>
+      </div>
+
+      <div class="cr-new-wrap">
+        <button type="button" class="cr-btn cr-btn-primary" id="crNewBtn"
+                aria-haspopup="menu" aria-expanded="false" title="新建 / 上传">
+          <img src="/icons/plus.svg" width="16" height="16" alt="">新建
+        </button>
+        <div class="cr-menu" id="crNewMenu" role="menu">
+          <div class="cr-menu-item" role="menuitem" tabindex="0" data-new="folder">新建文件夹</div>
+          <div class="cr-menu-item" role="menuitem" tabindex="0" data-new="upload">上传文件</div>
+          <div class="cr-menu-item" role="menuitem" tabindex="0" data-new="uploaddir">上传文件夹</div>
+        </div>
+      </div>
+
+      <%- include('partials/cr-theme-btn') %>
+      <%- include('partials/cr-user-menu') %>
+    </div>
+  </header>
+
+  <div class="cr-content">
+
+    <% if (typeof uploadError !== 'undefined' && uploadError) { %>
+      <div class="cr-alert cr-alert-error">
+        <img src="/icons/warning.svg" width="18" height="18" alt="">
+        <span><%= uploadError %></span>
+      </div>
+    <% } %>
+
+    <!-- ==================== 我的文件 ==================== -->
+    <section id="pan-files" class="pan-section">
+
+      <!-- 上传（隐藏表单 + 进度条；app.js 拦截走 S3 直传） -->
+      <form action="/upload" method="POST" enctype="multipart/form-data" class="upload-form pan-hidden-upload">
+        <input type="hidden" name="share" value="false">
+        <input type="hidden" name="folderId" value="<%= currentFolderId || '' %>">
+        <input type="file" name="file" id="panFileInput" multiple required>
+        <button type="submit" id="panUploadBtn" style="display:none">上传</button>
+        <div class="upload-progress" style="display:none;">
+          <div class="progress-track"><div class="progress-bar"></div></div>
+          <div class="progress-info">
+            <span class="progress-pct">0%</span>
+            <span class="progress-speed">--</span>
+            <span class="progress-eta"></span>
+          </div>
+        </div>
+      </form>
+
+      <!-- 上传文件夹（webkitdirectory；文件进入上传任务队列） -->
+      <input type="file" id="panDirInput" webkitdirectory directory multiple hidden>
+
+      <!-- 工具栏 -->
+      <div class="cr-toolbar">
+        <button type="button" class="cr-btn cr-btn-ghost" id="crNewFolderBtn">
+          <img src="/icons/plus.svg" width="16" height="16" alt="">新建文件夹
+        </button>
+        <button type="button" class="cr-btn cr-btn-ghost" id="crUploadDirBtn">
+          <img src="/icons/upload.svg" width="16" height="16" alt="">上传文件夹
+        </button>
+        <span class="cr-toolbar-sub" id="crCountText"><%= folders.length %> 个文件夹 · <%= personalFiles.length %> 个文件</span>
+        <span class="cr-spring"></span>
+        <div class="cr-seg" id="crFilterSeg" role="group" aria-label="筛选">
+          <button type="button" class="cr-seg-btn is-active" data-filter="all">全部</button>
+          <button type="button" class="cr-seg-btn" data-filter="folder">仅文件夹</button>
+          <button type="button" class="cr-seg-btn" data-filter="file">仅文件</button>
+          <button type="button" class="cr-seg-btn" data-filter="starred">收藏</button>
+        </div>
+        <div class="cr-seg" id="crSortSeg" role="group" aria-label="排序">
+          <button type="button" class="cr-seg-btn is-active" data-sort="name">名称</button>
+          <button type="button" class="cr-seg-btn" data-sort="size">大小</button>
+          <button type="button" class="cr-seg-btn" data-sort="time">时间</button>
+        </div>
+        <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" id="crSortDir" title="切换升序/降序">▲ 升序</button>
+        <a class="cr-btn cr-btn-text" href="/trash">回收站</a>
+      </div>
+
+      <!-- 标签筛选（阶段一）：点击标签筛选当前目录内文件 -->
+      <% if (typeof myTags !== 'undefined' && myTags.length) { %>
+        <div class="cr-tagbar" id="crTagBar">
+          <span class="cr-tagbar-label">标签</span>
+          <a class="cr-chip<%= activeTag ? '' : ' is-active' %>" href="/dashboard<%= currentFolderId ? '?folder=' + currentFolderId : '' %>">全部</a>
+          <% myTags.forEach(function(t) { %>
+            <a class="cr-chip<%= activeTag === t.id ? ' is-active' : '' %>" href="/dashboard?<%= currentFolderId ? 'folder=' + currentFolderId + '&' : '' %>tag=<%= t.id %>"<% if (t.color) { %> style="--chip-color:<%= t.color %>"<% } %>>
+              <%= t.name %><span class="cr-chip-num"><%= t.count %></span>
+            </a>
+          <% }) %>
+          <% if (activeTag) { %><span class="cr-tagbar-tip">当前按标签筛选，仅显示该标签下的文件</span><% } %>
+        </div>
+      <% } else { %>
+        <div class="cr-tagbar" id="crTagBar" style="display:none"></div>
+      <% } %>
+
+      <!-- 批量选择操作栏 -->
+      <div class="cr-selbar" id="crSelBar" style="display:none">
+        <span class="cr-selbar-count">已选 <b id="crSelCount">0</b> 项</span>
+        <button type="button" class="cr-btn cr-btn-text cr-btn-sm" id="crSelAll">全选</button>
+        <button type="button" class="cr-btn cr-btn-text cr-btn-sm" id="crSelInvert">反选</button>
+        <span class="cr-spring"></span>
+        <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" id="crSelDownload">打包下载</button>
+        <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" id="crSelMove">移动到</button>
+        <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" id="crSelCopy">复制到</button>
+        <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" id="crSelShare">分享</button>
+        <button type="button" class="cr-btn cr-btn-danger cr-btn-sm" id="crSelDelete">删除</button>
+        <button type="button" class="cr-btn cr-btn-text cr-btn-sm" id="crSelClear">取消</button>
+      </div>
+
+      <!-- 网格视图 -->
+      <div class="cr-card" id="panGridView">
+        <% if (folders.length === 0 && personalFiles.length === 0) { %>
+          <div class="cr-empty">
+            <img src="/icons/empty.svg" width="56" height="56" alt="">
+            <p>空空如也，上传文件或新建一个文件夹吧</p>
+          </div>
+        <% } else { %>
+          <div class="cr-grid" id="crGrid">
+            <% folders.forEach(function(f) { %>
+              <div class="cr-gcard pan-g-item" data-key="folder:<%= f.id %>" data-kind="folder" data-id="<%= f.id %>" data-name="<%= f.name %>" data-size="0" data-time="<%= tsOf(f.created_at) %>" data-owner="<%= _ownerName %>" data-shared="0" data-starred="<%= (starredKeys && starredKeys['folder:' + f.id]) ? 1 : 0 %>" data-tags="">
+                <input type="checkbox" class="cr-gcard-check cr-row-check" data-kind="folder" data-id="<%= f.id %>" data-name="<%= f.name %>" title="选择">
+                <a class="cr-gcard-ico" href="/dashboard?folder=<%= f.id %>" title="打开文件夹">
+                  <span class="cr-fi cr-fi--lg cr-fi--folder"><img src="/icons/folder.svg" width="28" height="28" alt="文件夹"></span>
+                </a>
+                <a class="cr-gcard-name pan-g-name" href="/dashboard?folder=<%= f.id %>"><%= f.name %></a>
+                <% if (starredKeys && starredKeys['folder:' + f.id]) { %><span class="cr-star-mark" title="已收藏">★</span><% } %>
+                <div class="cr-gcard-meta"><%= new Date(f.created_at).toLocaleDateString('zh-CN') %></div>
+                <div class="cr-gcard-ops">
+                  <a class="cr-op" href="/dashboard?folder=<%= f.id %>" title="打开"><img src="/icons/folder-open.svg" width="16" height="16" alt="打开"></a>
+                  <button type="button" class="cr-op" data-menu-btn title="更多操作" aria-label="更多操作"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                </div>
+              </div>
+            <% }) %>
+            <% personalFiles.forEach(function(file) { %>
+              <div class="cr-gcard pan-g-item" data-key="file:<%= file.id %>" data-kind="file" data-id="<%= file.id %>" data-name="<%= file.filename %>" data-size="<%= file.file_size || 0 %>" data-time="<%= tsOf(file.uploaded_at) %>" data-owner="<%= _ownerName %>" data-shared="0" data-starred="<%= (starredKeys && starredKeys['file:' + file.id]) ? 1 : 0 %>" data-tags="<%= (fileTags && fileTags[file.id]) ? fileTags[file.id].join(',') : '' %>">
+                <input type="checkbox" class="cr-gcard-check cr-row-check" data-kind="file" data-id="<%= file.id %>" data-name="<%= file.filename %>" title="选择">
+                <a class="cr-gcard-ico" href="/download/<%= file.id %>" title="点击下载">
+                  <span class="cr-fi cr-fi--lg cr-fi--<%= fileTint(file.filename) %>"><img src="<%= fileIconPath(file.filename) %>" width="28" height="28" alt=""></span>
+                </a>
+                <a class="cr-gcard-name pan-g-name" href="/download/<%= file.id %>" title="<%= file.filename %>"><%= file.filename %></a>
+                <% if (starredKeys && starredKeys['file:' + file.id]) { %><span class="cr-star-mark" title="已收藏">★</span><% } %>
+                <div class="cr-gcard-meta"><%= formatFileSize(file.file_size) %></div>
+                <div class="cr-gcard-ops">
+                  <a class="cr-op" href="/download/<%= file.id %>" title="下载"><img src="/icons/download.svg" width="16" height="16" alt="下载"></a>
+                  <button type="button" class="cr-op" data-menu-btn title="更多操作" aria-label="更多操作"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+          <div class="cr-empty" id="crGridEmpty" style="display:none;">
+            <img src="/icons/empty.svg" width="56" height="56" alt="">
+            <p id="crGridEmptyText">当前筛选条件下没有内容</p>
+          </div>
+        <% } %>
+      </div>
+
+      <!-- 列表视图 -->
+      <div class="cr-card" id="panListView" style="display:none">
+        <% if (folders.length === 0 && personalFiles.length === 0) { %>
+          <div class="cr-empty">
+            <img src="/icons/empty.svg" width="56" height="56" alt="">
+            <p>空空如也，上传文件或新建一个文件夹吧</p>
+          </div>
+        <% } else { %>
+          <div class="cr-table-scroll">
+            <table class="cr-table">
+              <thead>
+                <tr>
+                  <th class="cr-col-check"><input type="checkbox" id="crCheckAll" title="全选" aria-label="全选"></th>
+                  <th class="cr-th-sort" data-sort="name">名称<span class="cr-sort-ico"></span></th>
+                  <th class="cr-col-size cr-th-sort" data-sort="size">大小<span class="cr-sort-ico"></span></th>
+                  <th class="cr-col-time cr-th-sort" data-sort="time">修改时间<span class="cr-sort-ico"></span></th>
+                  <th class="cr-col-ops">操作</th>
+                </tr>
+              </thead>
+              <tbody id="crListBody">
+                <% folders.forEach(function(f) { %>
+                  <tr class="pan-g-item" data-key="folder:<%= f.id %>" data-kind="folder" data-id="<%= f.id %>" data-name="<%= f.name %>" data-size="0" data-time="<%= tsOf(f.created_at) %>" data-owner="<%= _ownerName %>" data-shared="0" data-starred="<%= (starredKeys && starredKeys['folder:' + f.id]) ? 1 : 0 %>" data-tags="">
+                    <td class="cr-col-check"><input type="checkbox" class="cr-row-check" data-kind="folder" data-id="<%= f.id %>" data-name="<%= f.name %>" aria-label="选择"></td>
+                    <td>
+                      <div class="cr-name">
+                        <span class="cr-fi cr-fi--folder"><img src="/icons/folder.svg" width="20" height="20" alt="文件夹"></span>
+                        <a class="cr-name-text pan-list-link" href="/dashboard?folder=<%= f.id %>" title="<%= f.name %>"><%= f.name %></a>
+                        <% if (starredKeys && starredKeys['folder:' + f.id]) { %><span class="cr-star-mark" title="已收藏">★</span><% } %>
+                      </div>
+                    </td>
+                    <td class="cr-col-size">—</td>
+                    <td class="cr-col-time"><%= new Date(f.created_at).toLocaleDateString('zh-CN') %></td>
+                    <td class="cr-col-ops">
+                      <div class="cr-row-ops">
+                        <a class="cr-op" href="/dashboard?folder=<%= f.id %>" title="打开"><img src="/icons/folder-open.svg" width="16" height="16" alt="打开"></a>
+                        <button type="button" class="cr-op" data-menu-btn title="更多操作" aria-label="更多操作"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                      </div>
+                    </td>
+                  </tr>
+                <% }) %>
+                <% personalFiles.forEach(function(file) { %>
+                  <tr class="pan-g-item" data-key="file:<%= file.id %>" data-kind="file" data-id="<%= file.id %>" data-name="<%= file.filename %>" data-size="<%= file.file_size || 0 %>" data-time="<%= tsOf(file.uploaded_at) %>" data-owner="<%= _ownerName %>" data-shared="0" data-starred="<%= (starredKeys && starredKeys['file:' + file.id]) ? 1 : 0 %>" data-tags="<%= (fileTags && fileTags[file.id]) ? fileTags[file.id].join(',') : '' %>">
+                    <td class="cr-col-check"><input type="checkbox" class="cr-row-check" data-kind="file" data-id="<%= file.id %>" data-name="<%= file.filename %>" aria-label="选择"></td>
+                    <td>
+                      <div class="cr-name">
+                        <span class="cr-fi cr-fi--<%= fileTint(file.filename) %>"><img src="<%= fileIconPath(file.filename) %>" width="20" height="20" alt=""></span>
+                        <a class="cr-name-text pan-list-link" href="/download/<%= file.id %>" title="<%= file.filename %>"><%= file.filename %></a>
+                        <% if (starredKeys && starredKeys['file:' + file.id]) { %><span class="cr-star-mark" title="已收藏">★</span><% } %>
+                      </div>
+                    </td>
+                    <td class="cr-col-size"><%= formatFileSize(file.file_size) %></td>
+                    <td class="cr-col-time"><%= new Date(file.uploaded_at).toLocaleString('zh-CN') %></td>
+                    <td class="cr-col-ops">
+                      <div class="cr-row-ops">
+                        <button type="button" class="cr-op" title="预览" onclick="openPreview(<%= file.id %>, null)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/></svg></button>
+                        <a class="cr-op" href="/download/<%= file.id %>" title="下载"><img src="/icons/download.svg" width="16" height="16" alt="下载"></a>
+                        <button type="button" class="cr-op" data-menu-btn title="更多操作" aria-label="更多操作"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+                      </div>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+          <div class="cr-empty" id="crListEmpty" style="display:none;">
+            <img src="/icons/empty.svg" width="56" height="56" alt="">
+            <p>当前筛选条件下没有内容</p>
+          </div>
+        <% } %>
+      </div>
+    </section>
+
+    <!-- ==================== 收藏（阶段一） ==================== -->
+    <section id="pan-starred" class="pan-section" style="display:none">
+      <div class="cr-card">
+        <div class="cr-card-head">
+          <h2>★ 收藏</h2>
+          <span class="cr-spring"></span>
+          <span class="cr-hint">共 <%= (typeof starredItems !== 'undefined' ? starredItems.length : 0) %> 项</span>
+        </div>
+        <div class="cr-card-body">
+          <% if (typeof starredItems === 'undefined' || !starredItems.length) { %>
+            <div class="cr-empty"><img src="/icons/empty.svg" width="56" height="56" alt=""><p>还没有收藏任何内容，可在文件条目的「更多操作」中收藏</p></div>
+          <% } else { %>
+            <div class="cr-table-scroll">
+              <table class="cr-table">
+                <thead><tr><th>名称</th><th class="cr-col-size">大小</th><th class="cr-col-time">时间</th><th class="cr-col-ops">操作</th></tr></thead>
+                <tbody>
+                  <% starredItems.forEach(function(it) { %>
+                    <tr>
+                      <td>
+                        <div class="cr-name">
+                          <span class="cr-fi cr-fi--<%= it.kind === 'folder' ? 'folder' : 'other' %>"><img src="<%= it.kind === 'folder' ? '/icons/folder.svg' : '/icons/file-generic.svg' %>" width="20" height="20" alt=""></span>
+                          <% if (it.kind === 'folder') { %>
+                            <a class="cr-name-text" href="/dashboard?folder=<%= it.id %>" title="<%= it.name %>"><%= it.name %></a>
+                          <% } else { %>
+                            <span class="cr-name-text" title="<%= it.name %>"><%= it.name %></span>
+                          <% } %>
+                        </div>
+                      </td>
+                      <td class="cr-col-size"><%= it.kind === 'folder' ? '—' : formatFileSize(it.size) %></td>
+                      <td class="cr-col-time"><%= it.ts || '—' %></td>
+                      <td class="cr-col-ops">
+                        <div class="cr-row-ops">
+                          <% if (it.kind === 'folder') { %>
+                            <a class="cr-btn cr-btn-ghost cr-btn-sm" href="/dashboard?folder=<%= it.id %>">打开</a>
+                          <% } else { %>
+                            <a class="cr-btn cr-btn-ghost cr-btn-sm" href="/download/<%= it.id %>">下载</a>
+                          <% } %>
+                          <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-unstar="<%= it.kind %>:<%= it.id %>">取消收藏</button>
+                        </div>
+                      </td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 最近访问（阶段一） ==================== -->
+    <section id="pan-recent" class="pan-section" style="display:none">
+      <div class="cr-card">
+        <div class="cr-card-head">
+          <h2>最近访问</h2>
+          <span class="cr-spring"></span>
+          <span class="cr-hint">最近打开的文件夹 / 预览过的文件（最多 50 条）</span>
+        </div>
+        <div class="cr-card-body">
+          <% if (typeof recentItems === 'undefined' || !recentItems.length) { %>
+            <div class="cr-empty"><img src="/icons/empty.svg" width="56" height="56" alt=""><p>暂无访问记录</p></div>
+          <% } else { %>
+            <div class="cr-table-scroll">
+              <table class="cr-table">
+                <thead><tr><th>名称</th><th class="cr-col-size">大小</th><th class="cr-col-time">访问时间</th><th class="cr-col-ops">操作</th></tr></thead>
+                <tbody>
+                  <% recentItems.forEach(function(it) { %>
+                    <tr>
+                      <td>
+                        <div class="cr-name">
+                          <span class="cr-fi cr-fi--<%= it.kind === 'folder' ? 'folder' : 'other' %>"><img src="<%= it.kind === 'folder' ? '/icons/folder.svg' : '/icons/file-generic.svg' %>" width="20" height="20" alt=""></span>
+                          <% if (it.kind === 'folder') { %>
+                            <a class="cr-name-text" href="/dashboard?folder=<%= it.id %>" title="<%= it.name %>"><%= it.name %></a>
+                          <% } else { %>
+                            <span class="cr-name-text" title="<%= it.name %>"><%= it.name %></span>
+                          <% } %>
+                        </div>
+                      </td>
+                      <td class="cr-col-size"><%= it.kind === 'folder' ? '—' : formatFileSize(it.size) %></td>
+                      <td class="cr-col-time"><%= it.viewed_at || '—' %></td>
+                      <td class="cr-col-ops">
+                        <div class="cr-row-ops">
+                          <% if (it.kind === 'folder') { %>
+                            <a class="cr-btn cr-btn-ghost cr-btn-sm" href="/dashboard?folder=<%= it.folder_id ? it.folder_id : '' %>">所在目录</a>
+                          <% } else { %>
+                            <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-preview="<%= it.id %>">预览</button>
+                            <a class="cr-btn cr-btn-ghost cr-btn-sm" href="/download/<%= it.id %>">下载</a>
+                          <% } %>
+                        </div>
+                      </td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 团队空间 ==================== -->
+    <section id="pan-teams" class="pan-section" style="display:none">
+      <div class="cr-card">
+        <div class="cr-card-head">
+          <h2><img src="/icons/users.svg" width="18" height="18" alt="">团队空间</h2>
+          <span class="cr-spring"></span>
+          <span class="cr-hint">我的 UID：<span class="cr-uid"><%= currentUser.uid %></span></span>
+        </div>
+        <div class="cr-card-body">
+          <% if (typeof teamSuccess !== 'undefined' && teamSuccess) { %>
+            <div class="cr-alert cr-alert-success">
+              <img src="/icons/check.svg" width="18" height="18" alt="">
+              <span><%= teamSuccess %></span>
+            </div>
+          <% } %>
+          <% if (typeof teamError !== 'undefined' && teamError) { %>
+            <div class="cr-alert cr-alert-error">
+              <img src="/icons/warning.svg" width="18" height="18" alt="">
+              <span><%= teamError %></span>
+            </div>
+          <% } %>
+
+          <% if (!hasTeam) { %>
+            <p class="cr-hint" style="margin-bottom:16px;">您还未加入任何团队。将您的 UID 告诉他人，他人即可加入您创建的团队；或输入团队长的 UID 加入已有团队。</p>
+            <div class="cr-grid-2">
+              <div class="cr-block">
+                <div class="cr-block-head"><h3><img src="/icons/plus.svg" width="18" height="18" alt="">创建团队</h3></div>
+                <form action="/team/create" method="POST">
+                  <div class="cr-field">
+                    <input class="cr-input" type="text" name="name" placeholder="团队名称" required>
+                  </div>
+                  <button type="submit" class="cr-btn cr-btn-primary">创建团队</button>
+                </form>
+              </div>
+              <div class="cr-block">
+                <div class="cr-block-head"><h3><img src="/icons/key.svg" width="18" height="18" alt="">加入团队</h3></div>
+                <form action="/team/join" method="POST">
+                  <div class="cr-field">
+                    <input class="cr-input" type="text" name="ownerUid" placeholder="团队长的 UID" required style="text-transform: uppercase;">
+                  </div>
+                  <div class="cr-field">
+                    <input class="cr-input" type="password" name="password" placeholder="团队密码（若团队设置了密码）">
+                  </div>
+                  <button type="submit" class="cr-btn cr-btn-primary">加入团队</button>
+                </form>
+              </div>
+            </div>
+          <% } else { %>
+            <% teams.forEach(function(team) { %>
+              <div class="cr-block">
+                <div class="cr-block-head">
+                  <h3><img src="/icons/folder.svg" width="18" height="18" alt=""><%= team.name %></h3>
+                  <% if (team.isOwner) { %><span class="cr-tag cr-tag-primary">我是团队长</span><% } %>
+                  <span class="cr-spring"></span>
+                  <span class="cr-hint">团队长：<%= team.owner_name %>（UID: <%= team.owner_uid %>）</span>
+                </div>
+
+                <form action="/team/<%= team.id %>/upload" method="POST" enctype="multipart/form-data" style="margin-bottom:16px;">
+                  <div class="file-input-wrapper">
+                    <input type="file" name="file" id="teamFile<%= team.id %>" required>
+                    <label for="teamFile<%= team.id %>" class="file-input-label">
+                      <span class="file-label-text"><img src="/icons/upload.svg" width="16" height="16" alt="">选择文件</span>
+                      <span class="file-hint">上传到团队</span>
+                    </label>
+                  </div>
+                  <div style="display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+                    <button type="submit" class="cr-btn cr-btn-primary cr-btn-sm">上传到团队</button>
+                  </div>
+                  <div class="upload-progress" style="display:none; margin-top:10px;">
+                    <div class="progress-track"><div class="progress-bar"></div></div>
+                    <div class="progress-info">
+                      <span class="progress-pct">0%</span>
+                      <span class="progress-speed">--</span>
+                      <span class="progress-eta"></span>
+                    </div>
+                  </div>
+                </form>
+
+                <% if (team.files.length === 0) { %>
+                  <p class="cr-hint">团队文件夹暂无文件</p>
+                <% } else { %>
+                  <table class="file-table">
+                    <thead>
+                      <tr>
+                        <th>文件名</th>
+                        <th>上传者</th>
+                        <th>大小</th>
+                        <th>上传时间</th>
+                        <th>操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <% team.files.forEach(function(file) { %>
+                        <tr>
+                          <td>
+                            <div class="file-name">
+                              <span class="cr-fi cr-fi--<%= fileTint(file.filename) %>"><img src="<%= fileIconPath(file.filename) %>" width="20" height="20" alt=""></span>
+                              <span class="cr-name-text" title="<%= file.filename %>"><%= file.filename %></span>
+                            </div>
+                          </td>
+                          <td class="pan-list-sub"><%= file.uploader_name %></td>
+                          <td class="pan-list-sub"><%= formatFileSize(file.file_size) %></td>
+                          <td class="pan-list-sub"><%= new Date(file.uploaded_at).toLocaleString('zh-CN') %></td>
+                          <td>
+                            <div class="file-actions">
+                              <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" onclick="openPreview(<%= file.id %>, <%= team.id %>)">预览</button>
+                              <a class="cr-btn cr-btn-ghost cr-btn-sm" href="/team/<%= team.id %>/download/<%= file.id %>">下载</a>
+                              <% if (file.user_id === currentUser.id) { %>
+                                <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-fid="<%= file.id %>" data-name="<%= file.filename %>" onclick="openShareModal(this.dataset.fid, this.dataset.name)"><img src="/icons/share.svg" width="14" height="14" alt="">分享</button>
+                              <% } %>
+                              <form action="/delete/<%= file.id %>" method="POST" style="display:inline;" data-confirm="确定删除该团队文件？">
+                                <button type="submit" class="cr-btn cr-btn-danger cr-btn-sm">删除</button>
+                              </form>
+                            </div>
+                          </td>
+                        </tr>
+                      <% }) %>
+                    </tbody>
+                  </table>
+                <% } %>
+
+                <% if (team.isOwner) { %>
+                  <div class="cr-block-sub">
+                    <div class="cr-block-head"><h4><img src="/icons/users.svg" width="16" height="16" alt="">团员管理</h4></div>
+                    <form action="/team/<%= team.id %>/add-member" method="POST" class="cr-inline-form">
+                      <input class="cr-input" type="text" name="targetUid" placeholder="输入用户 UID 添加团员" required style="text-transform: uppercase;">
+                      <button type="submit" class="cr-btn cr-btn-primary cr-btn-sm">添加团员</button>
+                    </form>
+                    <table class="file-table">
+                      <thead>
+                        <tr><th>用户名</th><th>UID</th><th>操作</th></tr>
+                      </thead>
+                      <tbody>
+                        <% team.members.forEach(function(m) { %>
+                          <tr>
+                            <td>
+                              <%= m.username %>
+                              <% if (m.uid === team.owner_uid) { %><span class="cr-tag cr-tag-primary" style="margin-left:6px;">团队长</span><% } %>
+                            </td>
+                            <td class="cr-mono"><%= m.uid %></td>
+                            <td>
+                              <% if (m.uid !== team.owner_uid) { %>
+                                <form action="/team/<%= team.id %>/remove-member" method="POST" style="display:inline;" data-confirm="确定移除团员 <%= m.username %>？">
+                                  <input type="hidden" name="memberUserId" value="<%= m.id %>">
+                                  <button type="submit" class="cr-btn cr-btn-danger cr-btn-sm">移除</button>
+                                </form>
+                              <% } else { %>
+                                <span class="cr-muted">—</span>
+                              <% } %>
+                            </td>
+                          </tr>
+                        <% }) %>
+                      </tbody>
+                    </table>
+                  </div>
+                <% } %>
+
+                <div class="cr-block-sub">
+                  <form action="/team/<%= team.id %>/leave" method="POST" data-confirm="确定退出该团队？退出后将无法访问团队文件夹。">
+                    <button type="submit" class="cr-btn cr-btn-ghost cr-btn-sm">退出团队</button>
+                  </form>
+                </div>
+
+                <% if (team.isOwner) { %>
+                  <div class="cr-danger-zone">
+                    <p><img src="/icons/warning.svg" width="14" height="14" alt=""> 解散团队将永久删除团队所有文件和成员关系，此操作不可恢复。</p>
+                    <button type="button" class="cr-btn cr-btn-danger cr-btn-sm" onclick="document.getElementById('dissolveForm<%= team.id %>').style.display='block'">解散团队</button>
+                    <div id="dissolveForm<%= team.id %>" style="display:none; margin-top:10px;">
+                      <form action="/team/<%= team.id %>/dissolve" method="POST" data-confirm="确定解散团队？所有团队文件将被永久删除，此操作不可恢复！" data-confirm-danger="1">
+                        <div class="cr-field">
+                          <input class="cr-input" type="password" name="password" required placeholder="请输入您的账户密码">
+                        </div>
+                        <button type="submit" class="cr-btn cr-btn-danger cr-btn-sm">确认解散</button>
+                        <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" onclick="document.getElementById('dissolveForm<%= team.id %>').style.display='none'">取消</button>
+                      </form>
+                    </div>
+                  </div>
+                <% } %>
+              </div>
+            <% }) %>
+          <% } %>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 账户设置 ==================== -->
+    <section id="pan-account" class="pan-section" style="display:none">
+      <% if (typeof passwordSuccess !== 'undefined' && passwordSuccess) { %>
+        <div class="cr-alert cr-alert-success">
+          <img src="/icons/check.svg" width="18" height="18" alt="">
+          <span><%= passwordSuccess %></span>
+        </div>
+      <% } %>
+      <% if (typeof passwordError !== 'undefined' && passwordError) { %>
+        <div class="cr-alert cr-alert-error">
+          <img src="/icons/warning.svg" width="18" height="18" alt="">
+          <span><%= passwordError %></span>
+        </div>
+      <% } %>
+      <% if (typeof deleteError !== 'undefined' && deleteError) { %>
+        <div class="cr-alert cr-alert-error">
+          <img src="/icons/warning.svg" width="18" height="18" alt="">
+          <span><%= deleteError %></span>
+        </div>
+      <% } %>
+
+      <!-- 个人资料 -->
+      <div class="cr-card cr-set-group">
+        <div class="cr-card-head">
+          <h2><img src="/icons/user.svg" width="18" height="18" alt="">个人资料</h2>
+        </div>
+        <div class="cr-card-body">
+          <div class="cr-profile">
+            <div style="text-align:center;">
+              <img id="profileAvatar" class="cr-avatar-lg" src="<%= currentUser.avatar ? ('/avatar/' + currentUser.uid) : '/icons/user.svg' %>" alt="头像">
+              <div style="margin-top:8px;">
+                <label for="avatarInput" style="cursor:pointer;font-size:12.5px;">更换头像</label>
+                <input type="file" id="avatarInput" accept="image/*" style="display:none;">
+              </div>
+            </div>
+            <div class="cr-profile-info">
+              <p>登录名：<b><%= currentUser.username %></b>（不可修改）</p>
+              <p>团队 ID：<b class="cr-mono"><%= currentUser.uid %></b></p>
+              <div class="cr-inline-form" style="margin-bottom:0;">
+                <input class="cr-input" type="text" id="nicknameInput" maxlength="20" value="<%= currentUser.nickname || currentUser.username %>" placeholder="昵称（≤20字）">
+                <button type="button" class="cr-btn cr-btn-primary" id="saveNicknameBtn">保存昵称</button>
+              </div>
+              <div class="cr-profile-msg" id="profileMsg"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 安全 -->
+      <div class="cr-card cr-set-group">
+        <div class="cr-card-head">
+          <h2><img src="/icons/lock.svg" width="18" height="18" alt="">安全</h2>
+        </div>
+        <div class="cr-card-body">
+          <div class="cr-block-head" style="margin-bottom:6px;">
+            <h4>登录密码</h4>
+            <span class="cr-spring"></span>
+            <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" id="changePasswordBtn">修改密码</button>
+          </div>
+          <p class="cr-hint">修改密码需验证原密码，修改后其它设备需重新登录。</p>
+          <div class="cr-danger-zone">
+            <p><img src="/icons/warning.svg" width="14" height="14" alt=""> 注销账户将永久删除您的账户与所有个人文件，此操作不可恢复。</p>
+            <button type="button" class="cr-btn cr-btn-danger cr-btn-sm" id="deleteAccountBtn"><img src="/icons/trash.svg" width="14" height="14" alt="">注销账户</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 外观 -->
+      <div class="cr-card cr-set-group">
+        <div class="cr-card-head">
+          <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M10.34 3.36A8.8 8.8 0 1 0 20.64 13.66A7.4 7.4 0 0 1 10.34 3.36z"/></svg>外观</h2>
+        </div>
+        <div class="cr-card-body">
+          <p class="cr-hint" style="margin-bottom:12px;">界面主题（保存后立即生效，并同步到其它页面）。</p>
+          <div class="cr-radio-cards" id="crThemeCards">
+            <button type="button" class="cr-radio-card" data-theme-choice="light">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12 7.4a4.6 4.6 0 1 0 0 9.2 4.6 4.6 0 0 0 0-9.2z"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2.4v2.2M12 19.4v2.2M2.4 12h2.2M19.4 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M5.2 18.8l1.6-1.6M17.2 6.8l1.6-1.6"/></g></svg>
+              <span>浅色</span>
+            </button>
+            <button type="button" class="cr-radio-card" data-theme-choice="dark">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M10.34 3.36A8.8 8.8 0 1 0 20.64 13.66A7.4 7.4 0 0 1 10.34 3.36z"/></svg>
+              <span>深色</span>
+            </button>
+            <button type="button" class="cr-radio-card" data-theme-choice="system">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 4.4a7.6 7.6 0 1 0 0 15.2z"/><circle cx="12" cy="12" r="7.6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+              <span>跟随系统</span>
+            </button>
+          </div>
+          <div class="cr-profile-msg" id="themeMsg"></div>
+        </div>
+      </div>
+
+      <!-- 关于 -->
+      <div class="cr-card cr-set-group">
+        <div class="cr-card-head">
+          <h2><img src="/icons/cloud.svg" width="18" height="18" alt="">关于</h2>
+        </div>
+        <div class="cr-card-body">
+          <div class="cr-kv"><span class="cr-kv-k">站点</span><span class="cr-kv-v">CC网盘</span></div>
+          <div class="cr-kv"><span class="cr-kv-k">存储</span><span class="cr-kv-v">对象存储直传（分片并发上传）</span></div>
+          <div class="cr-kv"><span class="cr-kv-k">协议</span><span class="cr-kv-v"><a href="/agreement" target="_blank" rel="noopener">用户协议</a> · <a href="/privacy" target="_blank" rel="noopener">隐私政策</a></span></div>
+          <div class="cr-kv"><span class="cr-kv-k">账户</span><span class="cr-kv-v"><%= currentUser.username %>（<%= currentUser.role === 'admin' ? '管理员' : '普通用户' %>）</span></div>
+        </div>
+      </div>
+    </section>
+  </div><!-- /.cr-content -->
+
+<!-- ==================== 详情面板（右侧滑出） ==================== -->
+<aside class="cr-detail" id="crDetail" aria-hidden="true">
+  <div class="cr-detail-head">
+    <img src="/icons/file-generic.svg" width="18" height="18" alt="" id="crDetailHeadIco">
+    <span>详细信息</span>
+    <span class="cr-spring"></span>
+    <button type="button" class="cr-icon-btn" id="crDetailClose" title="关闭" aria-label="关闭">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M6.6 6.6a1.2 1.2 0 0 1 1.7 0L12 10.3l3.7-3.7a1.2 1.2 0 1 1 1.7 1.7L13.7 12l3.7 3.7a1.2 1.2 0 0 1-1.7 1.7L12 13.7l-3.7 3.7a1.2 1.2 0 0 1-1.7-1.7L10.3 12 6.6 8.3a1.2 1.2 0 0 1 0-1.7z"/></svg>
+    </button>
+  </div>
+  <div class="cr-detail-body">
+    <div class="cr-detail-preview" id="crDetailPreview"><img src="/icons/file-generic.svg" width="56" height="56" alt=""></div>
+    <div class="cr-detail-name" id="crDetailName">—</div>
+    <div class="cr-detail-row"><span class="cr-detail-k">类型</span><span class="cr-detail-v" id="crDetailType">—</span></div>
+    <div class="cr-detail-row"><span class="cr-detail-k">大小</span><span class="cr-detail-v" id="crDetailSize">—</span></div>
+    <div class="cr-detail-row"><span class="cr-detail-k">修改时间</span><span class="cr-detail-v" id="crDetailTime">—</span></div>
+    <div class="cr-detail-row"><span class="cr-detail-k">上传者</span><span class="cr-detail-v" id="crDetailOwner">—</span></div>
+    <div class="cr-detail-row"><span class="cr-detail-k">分享状态</span><span class="cr-detail-v" id="crDetailShared">—</span></div>
+    <div class="cr-detail-rename">
+      <input class="cr-input" type="text" id="crDetailRenameInput" maxlength="200" placeholder="输入新名称">
+      <button type="button" class="cr-btn cr-btn-primary" id="crDetailRenameBtn">保存名称</button>
+    </div>
+    <div class="cr-detail-actions" id="crDetailActions"></div>
+  </div>
+</aside>
+
+<!-- ==================== 上传任务面板 ==================== -->
+<div class="cr-up" id="crUploadPanel" hidden>
+  <div class="cr-up-head">
+    <img src="/icons/upload.svg" width="16" height="16" alt="">
+    <span>上传任务</span>
+    <span class="cr-up-count" id="crUploadCount">0 / 0</span>
+    <span class="cr-spring"></span>
+    <button type="button" class="cr-btn cr-btn-text cr-btn-sm" id="crUploadClear" title="清除已完成/失败的任务">清除已完成</button>
+    <button type="button" class="cr-icon-btn" id="crUploadToggle" title="收起/展开" aria-label="收起展开">
+      <svg viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M11.15 8.58Q12 7.73 12.85 8.58L19.32 15.05Q20.17 15.9 19.32 16.75Q18.47 17.6 17.62 16.75L12 11.13L6.38 16.75Q5.53 17.6 4.68 16.75Q3.83 15.9 4.68 15.05Z"/></svg>
+    </button>
+  </div>
+  <div class="cr-up-list" id="crUploadList"></div>
+</div>
+
+<!-- ==================== 通用确认 / 提示弹窗 ==================== -->
+<div id="crConfirmModal" class="cr-modal-mask" style="display:none">
+  <div class="cr-modal" style="width:400px">
+    <h3 class="cr-modal-title" id="crConfirmTitle">确认操作</h3>
+    <p class="cr-hint" id="crConfirmMsg" style="margin-bottom:6px;white-space:pre-wrap;"></p>
+    <div class="cr-modal-btns">
+      <button type="button" class="cr-btn cr-btn-ghost" id="crConfirmCancel">取消</button>
+      <button type="button" class="cr-btn cr-btn-primary" id="crConfirmOk">确定</button>
+    </div>
+  </div>
+</div>
+
+<div id="crAlertModal" class="cr-modal-mask" style="display:none">
+  <div class="cr-modal" style="width:400px">
+    <h3 class="cr-modal-title" id="crAlertTitle">提示</h3>
+    <p class="cr-hint" id="crAlertMsg" style="margin-bottom:6px;white-space:pre-wrap;"></p>
+    <div class="cr-modal-btns">
+      <button type="button" class="cr-btn cr-btn-primary" id="crAlertOk">知道了</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 移动到弹窗 ==================== -->
+<div id="crMoveModal" class="cr-modal-mask" style="display:none">
+  <div class="cr-modal" style="width:440px">
+    <h3 class="cr-modal-title"><img src="/icons/folder-open.svg" width="18" height="18" alt="">移动到</h3>
+    <p class="cr-hint" id="crMoveTip" style="margin-bottom:10px;"></p>
+    <div id="crMoveTree" class="cr-table-scroll" style="max-height:320px;border:1px solid var(--cr-border);border-radius:var(--cr-radius);padding:6px;min-height:80px;"></div>
+    <label class="cr-check" style="margin-top:10px;">
+      <input type="checkbox" id="crMoveNewFolder"> 同时新建子文件夹
+    </label>
+    <div class="cr-field" id="crMoveNewFolderRow" style="display:none;margin:8px 0 0;">
+      <input class="cr-input" type="text" id="crMoveNewFolderName" maxlength="60" placeholder="新文件夹名称">
+    </div>
+    <div class="cr-modal-btns">
+      <button type="button" class="cr-btn cr-btn-ghost" id="crMoveCancel">取消</button>
+      <button type="button" class="cr-btn cr-btn-primary" id="crMoveOk">移动到这里</button>
+    </div>
+  </div>
+</div>
+
+<div class="cr-toasts" id="crToasts"></div>
+
+<!-- ==================== 新建文件夹弹窗 ==================== -->
+<div id="newFolderModal" class="cr-modal-mask" style="display:none">
+  <div class="cr-modal">
+    <h3 class="cr-modal-title"><img src="/icons/folder.svg" width="18" height="18" alt="">新建文件夹</h3>
+    <form action="/folder/create" method="POST">
+      <input type="hidden" name="parentId" value="<%= currentFolderId || '' %>">
+      <div class="cr-field">
+        <input class="cr-input" type="text" name="name" id="newFolderNameInput" maxlength="60" placeholder="请输入文件夹名称" required>
+      </div>
+      <div class="cr-modal-btns">
+        <button type="button" class="cr-btn cr-btn-ghost" onclick="closeNewFolderModal()">取消</button>
+        <button type="submit" class="cr-btn cr-btn-primary">创建</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ==================== 重命名弹窗 ==================== -->
+<div id="renameModal" class="cr-modal-mask" style="display:none">
+  <div class="cr-modal">
+    <h3 class="cr-modal-title"><img src="/icons/edit.svg" width="18" height="18" alt="">重命名</h3>
+    <form id="renameForm" action="" method="POST">
+      <div class="cr-field">
+        <input class="cr-input" type="text" name="name" id="renameInput" maxlength="200" placeholder="请输入新名称" required>
+      </div>
+      <div class="cr-modal-btns">
+        <button type="button" class="cr-btn cr-btn-ghost" onclick="closeRenameModal()">取消</button>
+        <button type="submit" class="cr-btn cr-btn-primary">确定</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ==================== 修改密码弹窗 ==================== -->
+<div id="passwordModal" class="cr-modal-mask" style="display:none">
+  <div class="cr-modal">
+    <h3 class="cr-modal-title"><img src="/icons/lock.svg" width="18" height="18" alt="">修改密码</h3>
+    <p class="cr-hint" style="margin-bottom:18px;">请输入原密码和新密码以完成修改：</p>
+    <form action="/account/password" method="POST">
+      <div class="cr-field">
+        <label class="cr-label">原密码</label>
+        <input class="cr-input" type="password" name="oldPassword" required placeholder="请输入原密码">
+      </div>
+      <div class="cr-field">
+        <label class="cr-label">新密码</label>
+        <input class="cr-input" type="password" name="newPassword" required placeholder="至少6位字符">
+      </div>
+      <div class="cr-field">
+        <label class="cr-label">确认新密码</label>
+        <input class="cr-input" type="password" name="confirmPassword" required placeholder="再次输入新密码">
+      </div>
+      <div class="cr-modal-btns">
+        <button type="submit" class="cr-btn cr-btn-primary">确认修改</button>
+        <button type="button" class="cr-btn cr-btn-ghost" id="cancelPasswordBtn">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ==================== 注销账户弹窗 ==================== -->
+<div id="deleteModal" class="cr-modal-mask" style="display:none">
+  <div class="cr-modal">
+    <h3 class="cr-modal-title" style="color:var(--cr-danger);"><img src="/icons/warning.svg" width="18" height="18" alt="">确认注销账户</h3>
+    <p class="cr-hint" style="margin-bottom:18px;">此操作将永久删除您的账户和所有文件，不可恢复。请输入密码以确认：</p>
+    <form action="/account/delete" method="POST">
+      <div class="cr-field">
+        <input class="cr-input" type="password" name="password" required placeholder="请输入您的密码">
+      </div>
+      <div class="cr-modal-btns">
+        <button type="submit" class="cr-btn cr-btn-danger">确认注销</button>
+        <button type="button" class="cr-btn cr-btn-ghost" id="cancelDeleteBtn">取消</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ==================== 文件预览弹窗 ==================== -->
+<div id="previewModal" class="cr-modal-mask" style="display:none; z-index:9999;">
+  <div class="cr-modal" style="width:min(920px,94vw);">
+    <div class="cr-modal-title" style="justify-content:space-between;">
+      <span id="pvTitle">预览</span>
+      <button type="button" class="cr-modal-close" onclick="closePreview()" aria-label="关闭">✕</button>
+    </div>
+    <div id="pvBody" class="cr-modal-body-dark" style="max-height:72vh;overflow:auto;text-align:center;"></div>
+    <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end;">
+      <a id="pvOpen" class="cr-btn cr-btn-ghost cr-btn-sm" target="_blank" rel="noopener" style="display:none;">新窗口打开</a>
+      <a id="pvDl" class="cr-btn cr-btn-ghost cr-btn-sm" style="display:none;">下载</a>
+      <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" onclick="closePreview()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 分享弹窗 ==================== -->
+<div id="shareModal" class="cr-modal-mask" style="display:none; z-index:10000">
+  <div class="cr-modal" style="width:480px">
+    <h3 class="cr-modal-title" id="shareModalTitle"><img src="/icons/share.svg" width="18" height="18" alt="">分享文件</h3>
+    <p id="shareFileName" class="cr-hint" style="margin-bottom:14px;word-break:break-all;"></p>
+    <p class="cr-hint" style="margin-bottom:8px;">任何人获得此链接和 <b style="color:var(--cr-danger);">提取码</b> 即可<b style="color:var(--cr-danger);">无需登录</b>直接下载，请谨慎分享：</p>
+    <div style="display:flex; gap:8px; margin-bottom:8px;">
+      <input type="text" id="shareLinkInput" class="cr-input" readonly style="flex:1;min-width:0;" onfocus="this.select()">
+      <button type="button" class="cr-btn cr-btn-primary" onclick="copyShareLink()">复制</button>
+    </div>
+    <div style="display:flex; gap:8px; margin-bottom:12px; align-items:center;">
+      <span class="cr-hint" style="white-space:nowrap;">访问密码:</span>
+      <input type="text" id="sharePwdInput" class="cr-input" readonly value="----" style="flex:0 0 100px;min-width:0;letter-spacing:4px;text-align:center;font-weight:600;color:var(--cr-warning);" onfocus="this.select()">
+      <button type="button" class="cr-btn cr-btn-ghost" onclick="copySharePwd()">复制密码</button>
+    </div>
+
+    <!-- 阶段一：有效期 / 提取码设置 -->
+    <div class="cr-field" style="margin-bottom:12px;">
+      <label class="cr-label">有效期</label>
+      <div class="cr-seg" id="crShareExpire" role="group" aria-label="分享有效期">
+        <button type="button" class="cr-seg-btn is-active" data-exp="0">永久</button>
+        <button type="button" class="cr-seg-btn" data-exp="1">1 天</button>
+        <button type="button" class="cr-seg-btn" data-exp="7">7 天</button>
+        <button type="button" class="cr-seg-btn" data-exp="30">30 天</button>
+      </div>
+      <div class="cr-hint" id="shareMetaText" style="margin-top:6px;">当前：永久有效 · 已下载 0 次</div>
+    </div>
+    <div class="cr-field" style="margin-bottom:12px;">
+      <label class="cr-label">提取码</label>
+      <div class="cr-seg" id="crShareCodeMode" role="group" aria-label="提取码设置">
+        <button type="button" class="cr-seg-btn is-active" data-code="keep">保持不变</button>
+        <button type="button" class="cr-seg-btn" data-code="auto">自动生成</button>
+        <button type="button" class="cr-seg-btn" data-code="custom">自定义</button>
+        <button type="button" class="cr-seg-btn" data-code="none">无提取码</button>
+      </div>
+      <input class="cr-input" id="crShareCodeInput" maxlength="32" placeholder="自定义提取码（4-16 位）" style="display:none;margin-top:8px;">
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+      <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" id="crShareApply">应用设置</button>
+    </div>
+
+    <div id="shareStatus" style="margin-bottom:12px; font-size:12.5px; color:var(--cr-text-2);"></div>
+    <div class="cr-modal-btns">
+      <button type="button" class="cr-btn cr-btn-danger" id="revokeShareBtn" onclick="revokeShare()">撤销分享</button>
+      <a class="cr-btn cr-btn-ghost" id="shareManageLink" href="/shares">我的分享</a>
+      <button type="button" class="cr-btn cr-btn-ghost" onclick="closeShareModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 标签弹窗（阶段一） ==================== -->
+<div id="crTagModal" class="cr-modal-mask" style="display:none; z-index:10001">
+  <div class="cr-modal" style="width:420px">
+    <h3 class="cr-modal-title"><img src="/icons/file-text.svg" width="18" height="18" alt="">文件标签</h3>
+    <p class="cr-hint" id="crTagFileName" style="margin-bottom:12px;word-break:break-all;"></p>
+    <div id="crTagList" class="cr-table-scroll" style="max-height:260px;border:1px solid var(--cr-border);border-radius:var(--cr-radius);padding:6px;min-height:60px;"></div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <input class="cr-input" id="crTagNewName" maxlength="20" placeholder="新标签名称" style="flex:1;min-width:0;">
+      <button type="button" class="cr-btn cr-btn-ghost" id="crTagNewBtn">新建标签</button>
+    </div>
+    <div class="cr-modal-btns">
+      <button type="button" class="cr-btn cr-btn-ghost" id="crTagCancel">取消</button>
+      <button type="button" class="cr-btn cr-btn-primary" id="crTagSave">保存标签</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 历史版本弹窗（阶段一） ==================== -->
+<div id="crVerModal" class="cr-modal-mask" style="display:none; z-index:10001">
+  <div class="cr-modal" style="width:520px">
+    <h3 class="cr-modal-title"><img src="/icons/edit.svg" width="18" height="18" alt="">历史版本</h3>
+    <p class="cr-hint" id="crVerFileName" style="margin-bottom:12px;word-break:break-all;"></p>
+    <div id="crVerList" class="cr-table-scroll" style="max-height:320px;"></div>
+    <div class="cr-modal-btns">
+      <button type="button" class="cr-btn cr-btn-ghost" id="crVerClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 拖拽上传遮罩（阶段一） -->
+<div class="cr-dropzone" id="crDropZone">
+  <div class="cr-dropzone-inner">
+    <img src="/icons/upload.svg" width="40" height="40" alt="">
+    <p>松开鼠标即可上传到当前文件夹</p>
+    <span class="cr-hint">支持同时拖入多个文件或文件夹</span>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+/* ==================== 公共交互组件：Toast / 确认弹窗 / 提示弹窗 ==================== */
+(function () {
+  function $(id) { return document.getElementById(id); }
+
+  window.crEsc = function (s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+
+  window.crToast = function (msg, kind) {
+    var wrap = $('crToasts');
+    if (!wrap) return;
+    var el = document.createElement('div');
+    el.className = 'cr-toast' + (kind ? ' is-' + kind : '');
+    el.textContent = msg;
+    wrap.appendChild(el);
+    setTimeout(function () { if (el.parentNode) { el.parentNode.removeChild(el); } }, 2800);
+  };
+
+  window.crConfirm = function (opt) {
+    if (typeof opt === 'string') { opt = { message: opt }; }
+    opt = opt || {};
+    return new Promise(function (resolve) {
+      var modal = $('crConfirmModal');
+      var ok = $('crConfirmOk');
+      var cancel = $('crConfirmCancel');
+      $('crConfirmTitle').textContent = opt.title || '确认操作';
+      $('crConfirmMsg').textContent = opt.message || '';
+      ok.textContent = opt.okText || '确定';
+      ok.className = 'cr-btn ' + (opt.danger ? 'cr-btn-danger' : 'cr-btn-primary');
+      modal.style.display = 'flex';
+      try { ok.focus(); } catch (e) { }
+      function done(v) {
+        modal.style.display = 'none';
+        ok.removeEventListener('click', onOk);
+        cancel.removeEventListener('click', onCancel);
+        modal.removeEventListener('click', onMask);
+        document.removeEventListener('keydown', onKey);
+        resolve(v);
+      }
+      function onOk() { done(true); }
+      function onCancel() { done(false); }
+      function onMask(e) { if (e.target === modal) { done(false); } }
+      function onKey(e) { if (e.key === 'Escape') { done(false); } }
+      ok.addEventListener('click', onOk);
+      cancel.addEventListener('click', onCancel);
+      modal.addEventListener('click', onMask);
+      document.addEventListener('keydown', onKey);
+    });
+  };
+
+  window.crAlert = function (msg, title) {
+    return new Promise(function (resolve) {
+      var modal = $('crAlertModal');
+      var ok = $('crAlertOk');
+      $('crAlertTitle').textContent = title || '提示';
+      $('crAlertMsg').textContent = msg || '';
+      modal.style.display = 'flex';
+      try { ok.focus(); } catch (e) { }
+      function done() {
+        modal.style.display = 'none';
+        ok.removeEventListener('click', done);
+        modal.removeEventListener('click', onMask);
+        document.removeEventListener('keydown', onKey);
+        resolve(true);
+      }
+      function onMask(e) { if (e.target === modal) { done(); } }
+      function onKey(e) { if (e.key === 'Escape') { done(); } }
+      ok.addEventListener('click', done);
+      modal.addEventListener('click', onMask);
+      document.addEventListener('keydown', onKey);
+    });
+  };
+
+  /* 声明式确认：<form data-confirm="..."> 拦截提交，确认后再真正提交 */
+  document.addEventListener('submit', function (e) {
+    var f = e.target;
+    if (!f || !f.dataset || !f.dataset.confirm) return;
+    if (f.dataset.confirmed === '1') { f.dataset.confirmed = ''; return; }
+    e.preventDefault();
+    e.stopPropagation();
+    var danger = !!f.dataset.confirmDanger;
+    window.crConfirm({
+      title: danger ? '危险操作' : '确认操作',
+      message: f.dataset.confirm,
+      danger: danger,
+      okText: danger ? '确认删除' : '确定'
+    }).then(function (okv) {
+      if (!okv) return;
+      f.dataset.confirmed = '1';
+      if (typeof HTMLFormElement !== 'undefined' && HTMLFormElement.prototype.submit) {
+        HTMLFormElement.prototype.submit.call(f);
+      } else { f.submit(); }
+      setTimeout(function () { f.dataset.confirmed = ''; }, 0);
+    });
+  }, true);
+})();
+</script>
+<script>
+(function() {
+  // ==================== 侧边栏 / 分栏切换 ====================
+  var sideItems = document.querySelectorAll('#panSideNav .pan-side-item');
+  var sections = { home: 'pan-files', files: 'pan-files', teams: 'pan-teams', account: 'pan-account', starred: 'pan-starred', recent: 'pan-recent' };
+  var crumb = document.getElementById('crCrumb');
+  var crumbHomeHTML = crumb ? crumb.innerHTML : '';
+
+  function activateTab(tab, pushState) {
+    if (!sections[tab]) tab = 'home';
+    for (var i = 0; i < sideItems.length; i++) {
+      var it = sideItems[i];
+      it.classList.toggle('is-active', it.dataset.pan === tab);
+    }
+    Object.keys(sections).forEach(function(k) {
+      var el = document.getElementById(sections[k]);
+      if (el) el.style.display = (sections[k] === sections[tab]) ? '' : 'none';
+    });
+    // 面包屑跟随当前栏目（“我的文件”保留文件夹层级面包屑）
+    if (crumb) {
+      if (tab === 'files' || tab === 'home') {
+        crumb.innerHTML = crumbHomeHTML;
+      } else {
+        var label = tab === 'teams' ? '团队空间' : (tab === 'starred' ? '收藏' : (tab === 'recent' ? '最近访问' : '账户设置'));
+        crumb.innerHTML = '<span class="cr-crumb-item is-current">' + label + '</span>';
+      }
+    }
+    if (pushState && window.history && history.replaceState) {
+      var url = location.pathname + (tab === 'files' || tab === 'home' ? '' : '?tab=' + tab);
+      history.replaceState(null, '', url);
+    }
+    if (tab !== 'files' && tab !== 'home') { updateSelBar(); }
+  }
+
+  for (var i = 0; i < sideItems.length; i++) {
+    (function(item) {
+      item.addEventListener('click', function(e) {
+        if (!item.dataset.pan) return;              // 普通外链导航项（回收站/搜索/管理后台等）
+        if (item.dataset.pan === 'home') return;    // 首页：交给浏览器跳转到 /dashboard 根目录
+        e.preventDefault();
+        activateTab(item.dataset.pan, true);
+      });
+    })(sideItems[i]);
+  }
+
+  // 初始栏目：?tab=teams|account|files
+  var initTab = 'home';
+  try {
+    var m = /[?&]tab=([a-z]+)/.exec(location.search);
+    if (m && sections[m[1]]) { initTab = m[1]; }
+  } catch (e) { }
+  activateTab(initTab, false);
+
+  // ==================== 视图切换（网格/列表，localStorage 记忆） ====================
+  var VIEW_KEY = 'cr_view_mode';
+  var viewBtns = document.querySelectorAll('#panViewToggle .pan-view-btn');
+  var gridEl = document.getElementById('panGridView');
+  var listEl = document.getElementById('panListView');
+
+  function setView(mode, save) {
+    for (var i = 0; i < viewBtns.length; i++) {
+      viewBtns[i].classList.toggle('is-active', viewBtns[i].dataset.view === mode);
+    }
+    if (gridEl) gridEl.style.display = mode === 'grid' ? '' : 'none';
+    if (listEl) listEl.style.display = mode === 'list' ? '' : 'none';
+    if (save) { try { localStorage.setItem(VIEW_KEY, mode); } catch (e) { } }
+  }
+  for (var v = 0; v < viewBtns.length; v++) {
+    (function(btn) {
+      btn.addEventListener('click', function() { setView(btn.dataset.view, true); });
+    })(viewBtns[v]);
+  }
+  var savedView = 'grid';
+  try { savedView = localStorage.getItem(VIEW_KEY) || 'grid'; } catch (e) { }
+  setView(savedView === 'list' ? 'list' : 'grid', false);
+
+  // ==================== 批量选择 ====================
+  var sel = {};            // key -> {kind, id, name}
+  var selBar = document.getElementById('crSelBar');
+  var selCount = document.getElementById('crSelCount');
+  var checkAll = document.getElementById('crCheckAll');
+
+  function selKeys() { return Object.keys(sel || {}); }
+
+  function syncChecks() {
+    var boxes = document.querySelectorAll('.cr-row-check');
+    for (var i = 0; i < boxes.length; i++) {
+      var b = boxes[i];
+      var key = b.dataset.kind + ':' + b.dataset.id;
+      b.checked = !!sel[key];
+      var box = b.closest('.cr-gcard') || b.closest('tr');
+      if (box) { box.classList.toggle('is-selected', !!sel[key]); }
+    }
+    if (checkAll) {
+      var all = visibleChecks();
+      var total = all.length, checked = 0;
+      for (var j = 0; j < all.length; j++) { if (all[j].checked) { checked++; } }
+      checkAll.checked = total > 0 && checked === total;
+      checkAll.indeterminate = checked > 0 && checked < total;
+    }
+  }
+
+  /* 当前筛选条件下可见的选择框（列表视图用） */
+  function visibleChecks() {
+    var all = document.querySelectorAll('#panListView .cr-row-check');
+    var out = [];
+    for (var i = 0; i < all.length; i++) {
+      var row = all[i].closest('tr');
+      if (!row || row.style.display !== 'none') { out.push(all[i]); }
+    }
+    return out;
+  }
+
+  function updateSelBar() {
+    var n = selKeys().length;
+    if (selCount) selCount.textContent = String(n);
+    if (selBar) selBar.style.display = n > 0 ? '' : 'none';
+  }
+
+  document.addEventListener('change', function(e) {
+    var t = e.target;
+    if (!t || !t.classList || !t.classList.contains('cr-row-check')) return;
+    var key = t.dataset.kind + ':' + t.dataset.id;
+    if (t.checked) { sel[key] = { kind: t.dataset.kind, id: t.dataset.id, name: t.dataset.name }; }
+    else { delete sel[key]; }
+    syncChecks();
+    updateSelBar();
+  });
+
+  if (checkAll) {
+    checkAll.addEventListener('change', function() {
+      var boxes = visibleChecks();
+      for (var i = 0; i < boxes.length; i++) {
+        var b = boxes[i];
+        var key = b.dataset.kind + ':' + b.dataset.id;
+        if (checkAll.checked) { sel[key] = { kind: b.dataset.kind, id: b.dataset.id, name: b.dataset.name }; }
+        else { delete sel[key]; }
+      }
+      syncChecks();
+      updateSelBar();
+    });
+  }
+
+  function selSetAll(on) {
+    var boxes = visibleChecks();
+    for (var i = 0; i < boxes.length; i++) {
+      var b = boxes[i];
+      var key = b.dataset.kind + ':' + b.dataset.id;
+      if (on) { sel[key] = { kind: b.dataset.kind, id: b.dataset.id, name: b.dataset.name }; }
+      else { delete sel[key]; }
+    }
+    syncChecks();
+    updateSelBar();
+  }
+
+  var selAllBtn = document.getElementById('crSelAll');
+  if (selAllBtn) { selAllBtn.addEventListener('click', function() { selSetAll(true); }); }
+
+  var selInvertBtn = document.getElementById('crSelInvert');
+  if (selInvertBtn) {
+    selInvertBtn.addEventListener('click', function() {
+      var boxes = visibleChecks();
+      for (var i = 0; i < boxes.length; i++) {
+        var b = boxes[i];
+        var key = b.dataset.kind + ':' + b.dataset.id;
+        if (sel[key]) { delete sel[key]; }
+        else { sel[key] = { kind: b.dataset.kind, id: b.dataset.id, name: b.dataset.name }; }
+      }
+      syncChecks();
+      updateSelBar();
+    });
+  }
+
+  var clearSel = document.getElementById('crSelClear');
+  if (clearSel) {
+    clearSel.addEventListener('click', function() {
+      sel = {};
+      syncChecks();
+      updateSelBar();
+    });
+  }
+
+  var selDl = document.getElementById('crSelDownload');
+  if (selDl) {
+    selDl.addEventListener('click', function() {
+      var items = selKeys().map(function(k) { return sel[k]; });
+      if (!items.length) { return; }
+      var fileIds = items.filter(function(it) { return it.kind === 'file'; }).map(function(it) { return Number(it.id); });
+      var folderIds = items.filter(function(it) { return it.kind === 'folder'; }).map(function(it) { return Number(it.id); });
+      downloadZip(fileIds, folderIds);
+    });
+  }
+
+  var selCopy = document.getElementById('crSelCopy');
+  if (selCopy) {
+    selCopy.addEventListener('click', function() {
+      var items = selKeys().map(function(k) { return sel[k]; });
+      if (!items.length) { return; }
+      openMoveModal(items, 'copy');
+    });
+  }
+
+  var selShare = document.getElementById('crSelShare');
+  if (selShare) {
+    selShare.addEventListener('click', function() {
+      var items = selKeys().map(function(k) { return sel[k]; });
+      if (items.length !== 1) {
+        crAlert('分享一次仅支持选择 1 个文件或文件夹。');
+        return;
+      }
+      openShareModal(items[0].id, items[0].name, items[0].kind);
+    });
+  }
+
+  var selMove = document.getElementById('crSelMove');
+  if (selMove) {
+    selMove.addEventListener('click', function() {
+      var items = selKeys().map(function(k) { return sel[k]; });
+      if (!items.length) { return; }
+      openMoveModal(items, 'move');
+    });
+  }
+
+  var selDelete = document.getElementById('crSelDelete');
+  if (selDelete) {
+    selDelete.addEventListener('click', function() {
+      var items = selKeys().map(function(k) { return sel[k]; });
+      if (!items.length) return;
+      crConfirm({
+        title: '删除所选',
+        message: '确定删除选中的 ' + items.length + ' 项？\n文件夹内的所有内容会一并删除（可在回收站恢复）。',
+        danger: true,
+        okText: '确认删除'
+      }).then(function (ok) {
+        if (!ok) return;
+        selDelete.disabled = true;
+        var done = 0, failed = 0;
+        items.forEach(function(it) {
+          var url = it.kind === 'folder' ? '/folder/' + it.id + '/delete' : '/delete/' + it.id;
+          fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Accept': 'text/html' } })
+            .then(function(r) { if (!r.ok) { failed++; } })
+            .catch(function() { failed++; })
+            .then(function() {
+              done++;
+              if (done === items.length) {
+                selDelete.disabled = false;
+                if (failed) { crToast('有 ' + failed + ' 项删除失败，请刷新后重试', 'error'); }
+                location.reload();
+              }
+            });
+        });
+      });
+    });
+  }
+
+  // ==================== 上传任务队列（复用 app.js 的 presign→PUT→confirm 请求逻辑） ====================
+  var FOLDER_ID = '<%= currentFolderId || '' %>';
+  var DASH_URL = '/dashboard' + (FOLDER_ID ? '?folder=' + FOLDER_ID : '');
+  var upPanel = document.getElementById('crUploadPanel');
+  var upList = document.getElementById('crUploadList');
+  var upCount = document.getElementById('crUploadCount');
+  var upTasks = [];
+  var upRunning = false;
+  var upReloaded = false;
+
+  function upRefreshCount() {
+    var done = 0, fail = 0;
+    upTasks.forEach(function (t) { if (t.state === 'done') { done++; } if (t.state === 'fail') { fail++; } });
+    upCount.textContent = '完成 ' + done + ' / 失败 ' + fail + ' / 共 ' + upTasks.length;
+    if (!upTasks.length) { upPanel.hidden = true; }
+  }
+
+  function upRemove(t) {
+    var i = upTasks.indexOf(t);
+    if (i >= 0) { upTasks.splice(i, 1); }
+    if (t.el && t.el.parentNode) { t.el.parentNode.removeChild(t.el); }
+    upRefreshCount();
+  }
+
+  function upAdd(file) {
+    var el = document.createElement('div');
+    el.className = 'cr-task';
+    el.innerHTML = '<div class="cr-task-top">'
+      + '<span class="cr-task-name"></span>'
+      + '<span class="cr-task-pct"></span>'
+      + '<span class="cr-task-state">等待</span>'
+      + '<button type="button" class="cr-task-x" title="移除任务" disabled>✕</button>'
+      + '</div><div class="progress-track"><div class="progress-bar"></div></div>';
+    el.querySelector('.cr-task-name').textContent = file.name;
+    var t = {
+      file: file,
+      state: 'wait',
+      el: el,
+      bar: el.querySelector('.progress-bar'),
+      pct: el.querySelector('.cr-task-pct'),
+      stateEl: el.querySelector('.cr-task-state'),
+      xBtn: el.querySelector('.cr-task-x')
+    };
+    t.xBtn.addEventListener('click', function () {
+      if (t.state === 'wait' || t.state === 'up') { return; }
+      upRemove(t);
+    });
+    upList.appendChild(el);
+    upTasks.push(t);
+    upPanel.hidden = false;
+    upRefreshCount();
+    return t;
+  }
+
+  /* 顺序执行队列（秒传/分片续传/直传统一走 app.js 的 uploadFileSmart，缺失时回退 multiThreadUpload） */
+  function upRun() {
+    if (upRunning) { return; }
+    var hasUploader = (typeof window.uploadFileSmart === 'function') || (typeof window.multiThreadUpload === 'function');
+    if (!hasUploader) { return; }
+    var next = null;
+    for (var i = 0; i < upTasks.length; i++) {
+      if (upTasks[i].state === 'wait') { next = upTasks[i]; break; }
+    }
+    if (!next) {
+      if (!upReloaded && upTasks.some(function (t) { return t.state === 'done'; })) {
+        upReloaded = true;
+        setTimeout(function () { window.location.href = DASH_URL; }, 1200);
+      }
+      return;
+    }
+    upRunning = true;
+    next.state = 'up';
+    next.stateEl.textContent = '上传中';
+    next.pct.textContent = '0%';
+
+    var upFn = (typeof window.uploadFileSmart === 'function') ? window.uploadFileSmart : window.multiThreadUpload;
+    upFn(next.file, false, function (p) {
+      var v = Math.max(0, Math.min(100, Math.round(p * 100)));
+      next.bar.style.width = v + '%';
+      next.pct.textContent = v + '%';
+    }, null, FOLDER_ID || null).then(function () {
+      next.state = 'done';
+      next.bar.style.width = '100%';
+      next.pct.textContent = '100%';
+      next.stateEl.textContent = '已完成';
+      next.el.classList.add('is-done');
+      next.xBtn.disabled = false;
+      next.xBtn.title = '从列表移除';
+      upRunning = false;
+      upRefreshCount();
+      upRun();
+    }).catch(function (err) {
+      next.state = 'fail';
+      next.bar.style.width = '100%';
+      next.stateEl.textContent = '失败';
+      next.el.classList.add('is-fail');
+      next.xBtn.disabled = false;
+      next.xBtn.title = '从列表移除';
+      upRunning = false;
+      upRefreshCount();
+      crToast('上传失败：' + ((err && err.message) ? err.message : '未知错误'), 'error');
+      upRun();
+    });
+  }
+
+  /* 老浏览器（app.js 未启用分片直传）：沿用原有隐藏表单提交路径 */
+  function upFallback() {
+    var btn = document.getElementById('panUploadBtn');
+    if (upPanel) { upPanel.hidden = true; }
+    if (btn) { btn.click(); }
+  }
+
+  /* 注意：先复制 FileList 再清空 input.value（清空会让原 FileList 变空） */
+  function filesToArray(list) {
+    var out = [];
+    if (!list) { return out; }
+    for (var i = 0; i < list.length; i++) { out.push(list[i]); }
+    return out;
+  }
+
+  function onPickFiles(files, input) {
+    var arr = filesToArray(files);
+    if (!arr.length) { return; }
+    if (input) { try { input.value = ''; } catch (e) { } }
+    if (typeof window.multiThreadUpload !== 'function') { upFallback(); return; }
+    for (var i = 0; i < arr.length; i++) { upAdd(arr[i]); }
+    upRun();
+  }
+
+  var fileInput = document.getElementById('panFileInput');
+  if (fileInput) {
+    fileInput.addEventListener('change', function () { onPickFiles(this.files, this); });
+  }
+
+  var dirInput = document.getElementById('panDirInput');
+  var dirBtn = document.getElementById('crUploadDirBtn');
+  if (dirBtn && dirInput) {
+    dirBtn.addEventListener('click', function () { dirInput.click(); });
+    dirInput.addEventListener('change', function () { onPickFiles(this.files, this); });
+  }
+
+  // ==================== 拖拽上传（文件/文件夹拖入文件区即加入上传队列） ====================
+  (function () {
+    var zone = document.getElementById('crDropZone');
+    var fileSection = document.getElementById('pan-files');
+    if (!fileSection) { return; }
+    var dragDepth = 0;
+    function isFileDrag(e) {
+      var dt = e.dataTransfer;
+      if (!dt) { return false; }
+      if (dt.types && Array.prototype.indexOf.call(dt.types, 'Files') >= 0) { return true; }
+      return false;
+    }
+    function show() { if (zone) { zone.classList.add('is-active'); } }
+    function hide() { if (zone) { zone.classList.remove('is-active'); } }
+    fileSection.addEventListener('dragenter', function (e) {
+      if (!isFileDrag(e)) { return; }
+      e.preventDefault();
+      dragDepth++;
+      show();
+    });
+    fileSection.addEventListener('dragover', function (e) {
+      if (!isFileDrag(e)) { return; }
+      e.preventDefault();
+      if (e.dataTransfer) { e.dataTransfer.dropEffect = 'copy'; }
+      show();
+    });
+    fileSection.addEventListener('dragleave', function (e) {
+      if (!isFileDrag(e)) { return; }
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (!dragDepth) { hide(); }
+    });
+    fileSection.addEventListener('drop', function (e) {
+      if (!isFileDrag(e)) { return; }
+      e.preventDefault();
+      dragDepth = 0;
+      hide();
+      var dt = e.dataTransfer;
+      var collector = window.crCollectDroppedFiles;
+      var promise = (typeof collector === 'function') ? collector(dt) : Promise.resolve(filesToArray(dt && dt.files));
+      promise.then(function (files) {
+        var arr = files || [];
+        if (!arr.length) { crToast('未识别到可上传的文件', 'error'); return; }
+        if (typeof window.uploadFileSmart !== 'function' && typeof window.multiThreadUpload !== 'function') { crAlert('当前浏览器不支持拖拽上传，请点击「上传文件」按钮'); return; }
+        for (var i = 0; i < arr.length; i++) { upAdd(arr[i]); }
+        upRun();
+        crToast('已加入上传队列：' + arr.length + ' 个文件');
+      }).catch(function () { crToast('读取拖入的文件失败', 'error'); });
+    });
+    // 防止拖到页面空白处时浏览器直接打开文件
+    ['dragover', 'drop'].forEach(function (ev) {
+      document.addEventListener(ev, function (e) {
+        if (!isFileDrag(e)) { return; }
+        if (fileSection.contains(e.target)) { return; }
+        e.preventDefault();
+        dragDepth = 0;
+        hide();
+      });
+    });
+  })();
+
+  if (upPanel) {
+    var upToggle = document.getElementById('crUploadToggle');
+    if (upToggle) {
+      upToggle.addEventListener('click', function () {
+        var min = upPanel.classList.toggle('is-min');
+        upToggle.title = min ? '展开' : '收起/展开';
+      });
+    }
+    var upClear = document.getElementById('crUploadClear');
+    if (upClear) {
+      upClear.addEventListener('click', function () {
+        var remain = [];
+        upTasks.slice().forEach(function (t) {
+          if (t.state === 'done' || t.state === 'fail') {
+            if (t.el && t.el.parentNode) { t.el.parentNode.removeChild(t.el); }
+          } else {
+            remain.push(t);
+          }
+        });
+        upTasks = remain;
+        upRefreshCount();
+      });
+    }
+  }
+
+  // ==================== 新建文件夹弹窗（默认名自动编号） ====================
+  var newFolderModal = document.getElementById('newFolderModal');
+  var newFolderInput = document.getElementById('newFolderNameInput');
+  window.openNewFolderModal = function() {
+    var existing = [];
+    document.querySelectorAll('#panGridView .cr-gcard-name').forEach(function(a) {
+      existing.push(a.textContent.trim());
+    });
+    var base = '新建文件夹';
+    var name = base;
+    var i = 2;
+    while (existing.indexOf(name) !== -1) { name = base + '(' + i + ')'; i++; }
+    newFolderInput.value = name;
+    newFolderModal.style.display = 'flex';
+    setTimeout(function() { newFolderInput.focus(); newFolderInput.select(); }, 50);
+  };
+  window.closeNewFolderModal = function() {
+    newFolderModal.style.display = 'none';
+  };
+  var newFolderBtn = document.getElementById('crNewFolderBtn');
+  if (newFolderBtn) {
+    newFolderBtn.addEventListener('click', function () { window.openNewFolderModal(); });
+  }
+
+  // ==================== 重命名弹窗（文件夹/文件通用） ====================
+  var renameModal = document.getElementById('renameModal');
+  var renameForm = document.getElementById('renameForm');
+  var renameInput = document.getElementById('renameInput');
+  window.openRename = function(type, id, name) {
+    renameForm.setAttribute('action', '/' + type + '/' + id + '/rename');
+    renameInput.value = name;
+    renameModal.style.display = 'flex';
+    setTimeout(function() { renameInput.focus(); renameInput.select(); }, 50);
+  };
+  window.closeRenameModal = function() {
+    renameModal.style.display = 'none';
+  };
+
+  // 重命名按钮（事件委托：通过 data-* 属性取参数，天然支持含引号等特殊字符的名称）
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('[data-rename]');
+    if (!btn) return;
+    openRename(btn.dataset.rename, btn.dataset.id, btn.dataset.name);
+  });
+
+  // 点击遮罩关闭弹窗
+  [newFolderModal, renameModal].forEach(function(m) {
+    m.addEventListener('click', function(e) {
+      if (e.target === m) m.style.display = 'none';
+    });
+  });
+
+  // ==================== 修改密码 / 注销账户弹窗 ====================
+  var delModal = document.getElementById('deleteModal');
+  document.getElementById('deleteAccountBtn').addEventListener('click', function() { delModal.style.display = 'flex'; });
+  document.getElementById('cancelDeleteBtn').addEventListener('click', function() { delModal.style.display = 'none'; });
+  delModal.addEventListener('click', function(e) { if (e.target === delModal) delModal.style.display = 'none'; });
+
+  var pwdModal = document.getElementById('passwordModal');
+  document.getElementById('changePasswordBtn').addEventListener('click', function() { pwdModal.style.display = 'flex'; });
+  document.getElementById('cancelPasswordBtn').addEventListener('click', function() { pwdModal.style.display = 'none'; });
+  pwdModal.addEventListener('click', function(e) { if (e.target === pwdModal) pwdModal.style.display = 'none'; });
+
+  // ==================== 排序 / 筛选 ====================
+  var SORT_KEY = 'cr_sort', FILTER_KEY = 'cr_filter';
+  var sortState = { key: 'name', dir: 1 };
+  var filterState = 'all';
+  try {
+    var _s = JSON.parse(localStorage.getItem(SORT_KEY) || 'null');
+    if (_s && (_s.key === 'name' || _s.key === 'size' || _s.key === 'time')) { sortState = _s; }
+    var _f = localStorage.getItem(FILTER_KEY);
+    if (_f === 'folder' || _f === 'file' || _f === 'starred') { filterState = _f; }
+  } catch (e) { }
+
+  function fmtSize(bytes) {
+    if (typeof formatFileSize === 'function') { return formatFileSize(Number(bytes) || 0); }
+    bytes = Number(bytes) || 0;
+    if (bytes < 1024) { return bytes + ' B'; }
+    if (bytes < 1048576) { return (bytes / 1024).toFixed(1) + ' KB'; }
+    if (bytes < 1073741824) { return (bytes / 1048576).toFixed(1) + ' MB'; }
+    return (bytes / 1073741824).toFixed(1) + ' GB';
+  }
+  function fmtTime(ms) {
+    if (!ms) { return '—'; }
+    try { return new Date(ms).toLocaleString('zh-CN'); } catch (e) { return '—'; }
+  }
+
+  function rowItems(root) {
+    if (!root) { return []; }
+    return Array.prototype.slice.call(root.querySelectorAll('.pan-g-item'));
+  }
+
+  function cmpItems(a, b) {
+    var ak = a.dataset.kind, bk = b.dataset.kind;
+    if (ak !== bk) { return ak === 'folder' ? -1 : 1; }   // 文件夹优先
+    var key = sortState.key, r = 0;
+    if (key === 'size') { r = Number(a.dataset.size || 0) - Number(b.dataset.size || 0); }
+    else if (key === 'time') { r = Number(a.dataset.time || 0) - Number(b.dataset.time || 0); }
+    else {
+      r = String(a.dataset.name || '').localeCompare(String(b.dataset.name || ''), 'zh-CN', { numeric: true, sensitivity: 'base' });
+    }
+    if (r === 0) {
+      r = String(a.dataset.name || '').localeCompare(String(b.dataset.name || ''), 'zh-CN', { numeric: true });
+    }
+    return r * (sortState.dir > 0 ? 1 : -1);
+  }
+
+  function syncSortUI() {
+    Array.prototype.forEach.call(document.querySelectorAll('#crSortSeg .cr-seg-btn'), function (b) {
+      b.classList.toggle('is-active', b.dataset.sort === sortState.key);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#crFilterSeg .cr-seg-btn'), function (b) {
+      b.classList.toggle('is-active', b.dataset.filter === filterState);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.cr-th-sort'), function (th) {
+      th.classList.remove('is-asc', 'is-desc');
+      if (th.dataset.sort === sortState.key) {
+        th.classList.add(sortState.dir > 0 ? 'is-asc' : 'is-desc');
+      }
+    });
+    var dirBtn = document.getElementById('crSortDir');
+    if (dirBtn) { dirBtn.textContent = (sortState.dir > 0 ? '▲ 升序' : '▼ 降序'); }
+  }
+
+  function applySortFilter() {
+    var grid = document.getElementById('crGrid');
+    var body = document.getElementById('crListBody');
+    [grid, body].forEach(function (root) {
+      var items = rowItems(root);
+      items.sort(cmpItems);
+      items.forEach(function (el) { root.appendChild(el); });
+      var visible = 0;
+      items.forEach(function (el) {
+        var show;
+        if (filterState === 'starred') { show = el.dataset.starred === '1'; }
+        else { show = (filterState === 'all' || el.dataset.kind === filterState); }
+        el.style.display = show ? '' : 'none';
+        if (show) { visible++; }
+      });
+      var emptyBox = root === grid ? document.getElementById('crGridEmpty') : document.getElementById('crListEmpty');
+      if (emptyBox) {
+        emptyBox.style.display = visible ? 'none' : '';
+        var txt = emptyBox.querySelector('p');
+        if (txt) {
+          txt.textContent = filterState === 'folder' ? '当前目录没有文件夹'
+            : (filterState === 'file' ? '当前目录没有文件'
+            : (filterState === 'starred' ? '当前目录没有收藏项（可在条目菜单中收藏）' : '当前筛选条件下没有内容'));
+        }
+      }
+    });
+    syncSortUI();
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('#crSortSeg .cr-seg-btn'), function (b) {
+    b.addEventListener('click', function () {
+      var k = b.dataset.sort;
+      if (sortState.key === k) { sortState.dir = -sortState.dir; }
+      else { sortState.key = k; sortState.dir = (k === 'name' ? 1 : -1); }
+      try { localStorage.setItem(SORT_KEY, JSON.stringify(sortState)); } catch (e) { }
+      applySortFilter();
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.cr-th-sort'), function (th) {
+    th.addEventListener('click', function () {
+      var k = th.dataset.sort;
+      if (sortState.key === k) { sortState.dir = -sortState.dir; }
+      else { sortState.key = k; sortState.dir = 1; }
+      try { localStorage.setItem(SORT_KEY, JSON.stringify(sortState)); } catch (e) { }
+      applySortFilter();
+    });
+  });
+  var dirToggle = document.getElementById('crSortDir');
+  if (dirToggle) {
+    dirToggle.addEventListener('click', function () {
+      sortState.dir = -sortState.dir;
+      try { localStorage.setItem(SORT_KEY, JSON.stringify(sortState)); } catch (e) { }
+      applySortFilter();
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#crFilterSeg .cr-seg-btn'), function (b) {
+    b.addEventListener('click', function () {
+      filterState = b.dataset.filter || 'all';
+      try { localStorage.setItem(FILTER_KEY, filterState); } catch (e) { }
+      applySortFilter();
+    });
+  });
+  applySortFilter();
+
+  // ==================== 条目菜单（右键 / ⋯ 更多按钮） ====================
+  // 图标：原创几何（圆角填充 · currentColor），与 public/icons/*.svg 同一套设计语言
+  function _i(inner) {
+    return '<svg viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true">' + inner + '</svg>';
+  }
+  var ICO = {
+    open: _i('<path d="M2.8 7.6A2.8 2.8 0 0 1 5.6 4.8h3.36c.74 0 1.45.29 1.98.8l1.1 1.1h6.36a2.8 2.8 0 0 1 2.8 2.8v1.6H2.8zM3 11.1h17.4a1.6 1.6 0 0 1 1.55 1.98l-1.4 5.9a2.8 2.8 0 0 1-2.72 2.18H6.17a2.8 2.8 0 0 1-2.72-2.18l-1.4-5.9A1.6 1.6 0 0 1 3 11.1z"/>'),
+    eye: _i('<path d="M12 4.6c4.9 0 8.5 4.4 9.9 6.6a1.5 1.5 0 0 1 0 1.6C20.5 15 16.9 19.4 12 19.4S3.5 15 2.1 12.8a1.5 1.5 0 0 1 0-1.6C3.5 9 7.1 4.6 12 4.6zM12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8z"/>'),
+    download: _i('<path d="M9.2 4.4Q9.2 3.2 10.4 3.2L13.6 3.2Q14.8 3.2 14.8 4.4L14.8 12Q14.8 13.2 16 13.2L17.6 13.2Q18.8 13.2 18 14.09L12.8 19.91Q12 20.8 11.2 19.91L6 14.09Q5.2 13.2 6.4 13.2L8 13.2Q9.2 13.2 9.2 12Z"/>'),
+    share: _i('<path d="M17.2 5.8L17.2 5.8A1.1 1.1 0 0 1 16.82 7.31L8.31 12.38A1.1 1.1 0 0 1 6.8 12L6.8 12A1.1 1.1 0 0 1 7.18 10.49L15.69 5.42A1.1 1.1 0 0 1 17.2 5.8Z"/>'
+      + '<path d="M17.2 18.2L17.2 18.2A1.1 1.1 0 0 1 15.69 18.58L7.18 13.51A1.1 1.1 0 0 1 6.8 12L6.8 12A1.1 1.1 0 0 1 8.31 11.62L16.82 16.69A1.1 1.1 0 0 1 17.2 18.2Z"/>'
+      + '<path d="M14.7 5.8a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0zM4.3 12a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0zM14.7 18.2a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0z"/>'),
+    edit: _i('<path d="M5.36 14.77L15.4 4.73A1.4 1.4 0 0 1 15.4 4.73L18.55 7.88A1.4 1.4 0 0 1 18.55 7.88L8.51 17.92A1.4 1.4 0 0 1 7.52 18.3L5.1 18.8A.9.9 0 0 1 4.03 17.73L4.53 15.31A1.4 1.4 0 0 1 5.36 14.77z"/>'),
+    move: _i('<path d="M2.8 7.6A2.8 2.8 0 0 1 5.6 4.8h3.36c.74 0 1.45.29 1.98.8l1.1 1.1h6.36a2.8 2.8 0 0 1 2.8 2.8v7.1a2.8 2.8 0 0 1-2.8 2.8H5.6a2.8 2.8 0 0 1-2.8-2.8zM10.9 10.4h2.2v3.6h2.4L12 17.7l-3.5-3.7h2.4z"/>'),
+    copy: _i('<path d="M6.6 3.4h5.8a3.2 3.2 0 0 1 3.2 3.2v5.8a3.2 3.2 0 0 1-3.2 3.2h-5.8a3.2 3.2 0 0 1-3.2-3.2v-5.8a3.2 3.2 0 0 1 3.2-3.2z"/>'
+      + '<path d="M11.8 8.6h5.6a3.2 3.2 0 0 1 3.2 3.2v5.6a3.2 3.2 0 0 1-3.2 3.2h-5.6a3.2 3.2 0 0 1-3.2-3.2v-5.6a3.2 3.2 0 0 1 3.2-3.2zM12.6 10.6h4a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2z"/>'),
+    info: _i('<path d="M12 2.6a9.4 9.4 0 1 0 0 18.8 9.4 9.4 0 0 0 0-18.8zM12 10.8a1.15 1.15 0 0 1 1.15 1.15v4.6a1.15 1.15 0 0 1-2.3 0v-4.6A1.15 1.15 0 0 1 12 10.8zM12 6.8a1.35 1.35 0 1 0 0 2.7 1.35 1.35 0 0 0 0-2.7z"/>'),
+    trash: _i('<path d="M10.25 2.6h3.5a0.75 0.75 0 0 1 0.75 0.75v0a0.75 0.75 0 0 1-0.75 0.75h-3.5a0.75 0.75 0 0 1-0.75-0.75v0a0.75 0.75 0 0 1 0.75-0.75zM4.85 4.6h14.3a1.25 1.25 0 0 1 1.25 1.25v0a1.25 1.25 0 0 1-1.25 1.25h-14.3a1.25 1.25 0 0 1-1.25-1.25v0a1.25 1.25 0 0 1 1.25-1.25zM5.6 8h12.8l-.76 10.4a2.9 2.9 0 0 1-2.89 2.5H9.25a2.9 2.9 0 0 1-2.89-2.5zM10.5 10.6h0a0.9 0.9 0 0 1 0.9 0.9v5.4a0.9 0.9 0 0 1-0.9 0.9h0a0.9 0.9 0 0 1-0.9-0.9v-5.4a0.9 0.9 0 0 1 0.9-0.9zM13.5 10.6h0a0.9 0.9 0 0 1 0.9 0.9v5.4a0.9 0.9 0 0 1-0.9 0.9h0a0.9 0.9 0 0 1-0.9-0.9v-5.4a0.9 0.9 0 0 1 0.9-0.9z"/>'),
+    folder: _i('<path d="M2.8 7.6A2.8 2.8 0 0 1 5.6 4.8h3.36c.74 0 1.45.29 1.98.8l1.1 1.1h6.36a2.8 2.8 0 0 1 2.8 2.8v7.1a2.8 2.8 0 0 1-2.8 2.8H5.6a2.8 2.8 0 0 1-2.8-2.8z"/>'),
+    plus: _i('<path d="M10.7 3.4a1.3 1.3 0 0 1 2.6 0v5h5a1.3 1.3 0 0 1 0 2.6h-5v5a1.3 1.3 0 0 1-2.6 0v-5h-5a1.3 1.3 0 0 1 0-2.6h5z"/>'),
+    upload: _i('<path d="M9.2 19.6Q9.2 20.8 10.4 20.8L13.6 20.8Q14.8 20.8 14.8 19.6L14.8 12Q14.8 10.8 16 10.8L17.6 10.8Q18.8 10.8 18 9.91L12.8 4.09Q12 3.2 11.2 4.09L6 9.91Q5.2 10.8 6.4 10.8L8 10.8Q9.2 10.8 9.2 12Z"/>'),
+    refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.4 11.6A7.4 7.4 0 1 1 15.6 5.1"/><path d="M19.6 3.4v5.2h-5.2"/></svg>',
+    star: _i('<path d="M11.58 4.16Q12 3.2 12.42 4.16L13.99 7.72Q14.41 8.68 15.45 8.79L19.32 9.18Q20.37 9.28 19.59 9.98L16.68 12.57Q15.9 13.27 16.12 14.29L16.95 18.09Q17.17 19.12 16.27 18.59L12.91 16.63Q12 16.1 11.09 16.63L7.73 18.59Q6.83 19.12 7.05 18.09L7.88 14.29Q8.1 13.27 7.32 12.57L4.41 9.98Q3.63 9.28 4.68 9.18L8.55 8.79Q9.59 8.68 10.01 7.72Z"/>'),
+    history: _i('<path d="M12 4.6a7.4 7.4 0 1 0 0 14.8 7.4 7.4 0 0 0 0-14.8zM12 6.4a5.6 5.6 0 1 0 0 11.2 5.6 5.6 0 0 0 0-11.2zM11.05 8.2Q11.05 8.2 11.05 8.2L12.95 8.2Q12.95 8.2 12.95 8.2L12.95 11.05Q12.95 11.05 12.95 11.05L15.1 11.05Q15.1 11.05 15.1 11.05L15.1 12.95Q15.1 12.95 15.1 12.95L11.05 12.95Q11.05 12.95 11.05 12.95Z"/>'),
+    tag: _i('<path d="M6 5.4h12a3.2 3.2 0 0 1 3.2 3.2v6.8a3.2 3.2 0 0 1-3.2 3.2h-12a3.2 3.2 0 0 1-3.2-3.2v-6.8a3.2 3.2 0 0 1 3.2-3.2zM5.3 12a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0-3.8 0z"/>'),
+    archive: _i('<path d="M5 3.6h14a1.8 1.8 0 0 1 1.8 1.8v1a1.8 1.8 0 0 1-1.8 1.8h-14a1.8 1.8 0 0 1-1.8-1.8v-1a1.8 1.8 0 0 1 1.8-1.8zM5.4 8.4h13.2v9.6a2.8 2.8 0 0 1-2.8 2.8H8.2a2.8 2.8 0 0 1-2.8-2.8zM11.1 12.2h1.8a0.9 0.9 0 0 1 0.9 0.9v0a0.9 0.9 0 0 1-0.9 0.9h-1.8a0.9 0.9 0 0 1-0.9-0.9v0a0.9 0.9 0 0 1 0.9-0.9z"/>'),
+    copyTo: _i('<path d="M6.6 3.4h5.8a3.2 3.2 0 0 1 3.2 3.2v5.8a3.2 3.2 0 0 1-3.2 3.2h-5.8a3.2 3.2 0 0 1-3.2-3.2v-5.8a3.2 3.2 0 0 1 3.2-3.2z"/>'
+      + '<path d="M11.8 8.6h5.6a3.2 3.2 0 0 1 3.2 3.2v5.6a3.2 3.2 0 0 1-3.2 3.2h-5.6a3.2 3.2 0 0 1-3.2-3.2v-5.6a3.2 3.2 0 0 1 3.2-3.2zM12.6 10.6h4a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2z"/>'),
+    cut: _i('<path d="M4 18.2a2.6 2.6 0 1 0 5.2 0a2.6 2.6 0 1 0-5.2 0zM5.3 18.2a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0-2.6 0zM14.8 18.2a2.6 2.6 0 1 0 5.2 0a2.6 2.6 0 1 0-5.2 0zM16.1 18.2a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0-2.6 0z"/>'
+      + '<path d="M7.59 17.22L7.59 17.22A1.05 1.05 0 0 1 7.27 15.77L14.96 3.71A1.05 1.05 0 0 1 16.41 3.38L16.41 3.38A1.05 1.05 0 0 1 16.73 4.83L9.04 16.89A1.05 1.05 0 0 1 7.59 17.22Z"/>'
+      + '<path d="M7.59 3.38L7.59 3.38A1.05 1.05 0 0 1 9.04 3.71L16.73 15.77A1.05 1.05 0 0 1 16.41 17.22L16.41 17.22A1.05 1.05 0 0 1 14.96 16.89L7.27 4.83A1.05 1.05 0 0 1 7.59 3.38Z"/>'),
+    paste: _i('<path d="M7.8 4.6h8.4a3.2 3.2 0 0 1 3.2 3.2v10.6a3.2 3.2 0 0 1-3.2 3.2h-8.4a3.2 3.2 0 0 1-3.2-3.2v-10.6a3.2 3.2 0 0 1 3.2-3.2zM9.6 2.6h4.8a1 1 0 0 1 1 1v0a1 1 0 0 1-1 1h-4.8a1 1 0 0 1-1-1v0a1 1 0 0 1 1-1z"/>'),
+    check: _i('<path d="M6.24 11.52Q5.78 11.98 6.42 12.62L8.96 15.16Q9.6 15.8 10.24 15.16L17.45 7.95Q18.09 7.31 17.63 6.85Q17.17 6.39 16.53 7.03L10.24 13.32Q9.6 13.96 8.96 13.32L7.34 11.7Q6.7 11.06 6.24 11.52Z"/>')
+  };
+
+  var floatMenu = document.createElement('div');
+  floatMenu.className = 'cr-menu cr-menu--float';
+  floatMenu.id = 'crFloatMenu';
+  document.body.appendChild(floatMenu);
+  var floatOwner = null;   // 触发菜单的条目
+
+  function menuBtn(act, label, ico, opt) {
+    opt = opt || {};
+    return '<button type="button" class="cr-menu-item' + (opt.danger ? ' is-danger' : '') + '"'
+      + (opt.disabled ? ' disabled' : '') + ' data-act="' + act + '">'
+      + (ICO[ico] || '') + '<span>' + label + '</span></button>';
+  }
+
+  function buildItemMenu(item) {
+    var isFile = item.dataset.kind === 'file';
+    var shared = item.dataset.shared === '1';
+    var starred = item.dataset.starred === '1';
+    var name = item.dataset.name || '';
+    var isZip = isFile && /\.zip$/i.test(name);
+    var html = '<div class="cr-menu-head"><b>' + crEsc(name) + '</b><span>'
+      + (isFile ? '文件' : '文件夹') + (shared ? ' · 已分享' : '') + (starred ? ' · 已收藏' : '') + '</span></div>';
+    if (!isFile) { html += menuBtn('open', '打开', 'open'); }
+    if (isFile) {
+      html += menuBtn('preview', '预览', 'eye');
+      html += menuBtn('download', '下载', 'download');
+    }
+    html += menuBtn('detail', '详细信息', 'info');
+    html += menuBtn('star', starred ? '取消收藏' : '收藏', 'star');
+    html += '<div class="cr-menu-sep"></div>';
+    html += menuBtn('share', '分享', 'share');
+    html += menuBtn('rename', '重命名', 'edit');
+    html += menuBtn('move', '移动到…', 'move');
+    html += menuBtn('copyto', '复制到…', 'copyTo');
+    html += menuBtn('copy', '复制（加入剪贴板）', 'copy');
+    html += menuBtn('cut', '剪切（加入剪贴板）', 'cut');
+    if (isFile) {
+      html += '<div class="cr-menu-sep"></div>';
+      html += menuBtn('tag', '标签', 'tag');
+      html += menuBtn('versions', '历史版本', 'history');
+      if (isZip) { html += menuBtn('unzip', '解压到当前文件夹', 'archive'); }
+    } else {
+      html += '<div class="cr-menu-sep"></div>';
+      html += menuBtn('zip', '打包下载(zip)', 'archive');
+    }
+    html += '<div class="cr-menu-sep"></div>';
+    html += menuBtn('newfolder', '新建文件夹', 'plus');
+    html += menuBtn('upload', '上传文件', 'upload');
+    html += menuBtn('uploaddir', '上传文件夹', 'folder');
+    html += '<div class="cr-menu-sep"></div>';
+    html += menuBtn('delete', '删除', 'trash', { danger: true });
+    return html;
+  }
+
+  function buildBlankMenu() {
+    var clip = getClip();
+    var html = '<div class="cr-menu-head"><b>当前目录</b><span>空白处操作</span></div>'
+      + menuBtn('newfolder', '新建文件夹', 'plus')
+      + menuBtn('upload', '上传文件', 'upload')
+      + menuBtn('uploaddir', '上传文件夹', 'folder');
+    if (clip && clip.items && clip.items.length) {
+      html += '<div class="cr-menu-sep"></div>'
+        + menuBtn('paste', '粘贴到当前文件夹（' + clip.items.length + ' 项 · ' + (clip.mode === 'cut' ? '剪切' : '复制') + '）', 'paste');
+    }
+    html += '<div class="cr-menu-sep"></div>'
+      + menuBtn('selectall', '全选', 'check')
+      + menuBtn('refresh', '刷新列表', 'refresh');
+    return html;
+  }
+
+  // ==================== 剪贴板（复制/剪切到目录） ====================
+  var CLIP_KEY = 'cr_clip';
+  function getClip() {
+    try {
+      var c = JSON.parse(localStorage.getItem(CLIP_KEY) || 'null');
+      if (!c || !c.items || !c.items.length) { return null; }
+      return c;
+    } catch (e) { return null; }
+  }
+  function setClip(c) {
+    try {
+      if (c && c.items && c.items.length) { localStorage.setItem(CLIP_KEY, JSON.stringify(c)); }
+      else { localStorage.removeItem(CLIP_KEY); }
+    } catch (e) { }
+  }
+  function addToClip(mode, items) {
+    var clip = getClip() || { mode: mode, items: [] };
+    clip.mode = mode;
+    items.forEach(function (it) {
+      if (!clip.items.some(function (x) { return x.kind === it.kind && String(x.id) === String(it.id); })) {
+        clip.items.push({ kind: it.kind, id: it.id, name: it.name });
+      }
+    });
+    setClip(clip);
+    crToast((mode === 'cut' ? '已剪切 ' : '已复制 ') + items.length + ' 项到剪贴板' + (mode === 'cut' ? '，进入目标文件夹后粘贴' : '，进入目标文件夹后粘贴'));
+  }
+  function pasteClip(targetFolderId) {
+    var clip = getClip();
+    if (!clip || !clip.items.length) { crToast('剪贴板为空'); return; }
+    var target = targetFolderId ? Number(targetFolderId) : 0;
+    var jobs = clip.items.map(function (it) {
+      var isFolder = it.kind === 'folder';
+      var url = clip.mode === 'cut'
+        ? (isFolder ? '/api/folder/move' : '/api/file/move')
+        : (isFolder ? '/api/folder/copy' : '/api/file/copy');
+      var body = isFolder ? { id: Number(it.id), parentId: target } : { id: Number(it.id), folderId: target };
+      return fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).then(function (r) { return r.json(); });
+    });
+    Promise.all(jobs).then(function (res) {
+      var bad = res.filter(function (x) { return !x || !x.ok; });
+      if (bad.length) {
+        crAlert('有 ' + bad.length + ' 项失败：' + ((bad[0] && bad[0].error) || '未知错误'));
+        return;
+      }
+      if (clip.mode === 'cut') { setClip(null); }
+      crToast((clip.mode === 'cut' ? '已移动 ' : '已复制 ') + res.length + ' 项', 'success');
+      setTimeout(function () { location.reload(); }, 700);
+    }).catch(function (err) { crAlert('粘贴失败：' + err.message); });
+  }
+
+  function placeFloatMenu(x, y) {
+    floatMenu.style.left = '0px';
+    floatMenu.style.top = '0px';
+    var w = floatMenu.offsetWidth, h = floatMenu.offsetHeight;
+    var vw = window.innerWidth, vh = window.innerHeight;
+    if (x + w + 8 > vw) { x = Math.max(8, vw - w - 8); }
+    if (y + h + 8 > vh) { y = Math.max(8, vh - h - 8); }
+    floatMenu.style.left = x + 'px';
+    floatMenu.style.top = y + 'px';
+  }
+
+  function openFloatMenu(html, x, y) {
+    floatMenu.innerHTML = html;
+    floatMenu.classList.add('is-open');
+    placeFloatMenu(x, y);
+  }
+  function closeFloatMenu() {
+    floatMenu.classList.remove('is-open');
+    floatOwner = null;
+  }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('[data-menu-btn]') : null;
+    if (btn) {
+      e.preventDefault();
+      var item = btn.closest('.pan-g-item');
+      var rect = btn.getBoundingClientRect();
+      closeFloatMenu();
+      floatOwner = item;
+      var html = item ? buildItemMenu(item) : buildBlankMenu();
+      var x = rect.right - 196, y = rect.bottom + 6;
+      setTimeout(function () { openFloatMenu(html, Math.max(8, x), y); }, 0);
+      return;
+    }
+    if (!floatMenu.contains(e.target)) { closeFloatMenu(); }
+  });
+
+  document.addEventListener('contextmenu', function (e) {
+    var host = e.target.closest ? e.target.closest('#pan-files') : null;
+    if (!host) { return; }
+    e.preventDefault();
+    var item = e.target.closest('.pan-g-item');
+    // 注意：closeFloatMenu() 会清空 floatOwner，必须先关闭再赋值，
+    // 否则右键菜单里的条目动作会因 floatOwner 为空而全部失效
+    closeFloatMenu();
+    floatOwner = item;
+    var html = item ? buildItemMenu(item) : buildBlankMenu();
+    setTimeout(function () { openFloatMenu(html, e.clientX, e.clientY); }, 0);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { closeFloatMenu(); closeDetail(); }
+  });
+  window.addEventListener('scroll', function (e) {
+    // 菜单自身滚动（内容超出 max-height）不应关闭菜单，否则短视口下无法点到末尾项
+    if (floatMenu && (e.target === floatMenu || (e.target && floatMenu.contains(e.target)))) { return; }
+    closeFloatMenu();
+  }, true);
+
+  floatMenu.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-act]') : null;
+    if (!b || b.disabled) { return; }
+    var item = floatOwner;
+    var act = b.dataset.act;
+    closeFloatMenu();
+    doMenuAction(act, item);
+  });
+
+  function clickDownload(href) {
+    var a = document.createElement('a');
+    a.href = href;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  function confirmDeleteItem(kind, id, name) {
+    crConfirm({
+      title: kind === 'folder' ? '删除文件夹' : '删除文件',
+      message: kind === 'folder'
+        ? ('确定删除文件夹「' + name + '」？内部所有文件和子文件夹都会一并删除（可在回收站恢复）。')
+        : ('确定删除「' + name + '」？删除后可在回收站恢复。'),
+      danger: true,
+      okText: '确认删除'
+    }).then(function (ok) {
+      if (!ok) { return; }
+      var url = kind === 'folder' ? '/folder/' + id + '/delete' : '/delete/' + id;
+      fetch(url, { method: 'POST', credentials: 'same-origin' }).then(function (r) {
+        if (!r.ok) { crToast('删除失败（HTTP ' + r.status + '）', 'error'); return; }
+        crToast('已删除', 'success');
+        setTimeout(function () { location.reload(); }, 600);
+      }).catch(function () { crToast('网络错误，删除失败', 'error'); });
+    });
+  }
+
+  function doMenuAction(act, item) {
+    if (act === 'newfolder') { openNewFolderModal(); return; }
+    if (act === 'upload') { var fi = document.getElementById('panFileInput'); if (fi) { fi.click(); } return; }
+    if (act === 'uploaddir') { var di = document.getElementById('panDirInput'); if (di) { di.click(); } return; }
+    if (act === 'refresh') { location.reload(); return; }
+    if (act === 'selectall') { selSetAll(true); return; }
+    if (act === 'paste') { pasteClip(FOLDER_ID || 0); return; }
+    if (!item) { return; }
+    var kind = item.dataset.kind, id = item.dataset.id, name = item.dataset.name || '';
+    if (act === 'open') { location.href = '/dashboard?folder=' + encodeURIComponent(id); return; }
+    if (act === 'preview') { openPreview(id, null); return; }
+    if (act === 'download') { clickDownload('/download/' + id); return; }
+    if (act === 'share') { openShareModal(id, name, kind); return; }
+    if (act === 'rename') { openRename(kind, id, name); return; }
+    if (act === 'move') { openMoveModal([{ kind: kind, id: id, name: name }], 'move'); return; }
+    if (act === 'copyto') { openMoveModal([{ kind: kind, id: id, name: name }], 'copy'); return; }
+    if (act === 'copy') { addToClip('copy', [{ kind: kind, id: id, name: name }]); return; }
+    if (act === 'cut') { addToClip('cut', [{ kind: kind, id: id, name: name }]); return; }
+    if (act === 'delete') { confirmDeleteItem(kind, id, name); return; }
+    if (act === 'detail') { openDetail(item); return; }
+    if (act === 'star') { toggleStar(item); return; }
+    if (act === 'tag') { openTagModal(id, name); return; }
+    if (act === 'versions') { openVersionsModal(id, name); return; }
+    if (act === 'unzip') { unzipFile(id, name); return; }
+    if (act === 'zip') { downloadZip([], [id]); return; }
+  }
+
+  // ==================== 收藏（星标） ====================
+  function toggleStar(item) {
+    var kind = item.dataset.kind, id = item.dataset.id;
+    fetch('/api/star/toggle', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: kind, id: Number(id) })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok) { crAlert((j && j.error) || '操作失败'); return; }
+      item.dataset.starred = j.starred ? '1' : '0';
+      var mark = item.querySelector('.cr-star-mark');
+      if (j.starred && !mark) {
+        mark = document.createElement('span');
+        mark.className = 'cr-star-mark';
+        mark.title = '已收藏';
+        mark.textContent = '★';
+        var nameEl = item.querySelector('.cr-name') || item.querySelector('.cr-gcard-name');
+        if (nameEl && nameEl.parentNode) { nameEl.parentNode.insertBefore(mark, nameEl.nextSibling); }
+        else { item.appendChild(mark); }
+      } else if (!j.starred && mark) {
+        mark.parentNode.removeChild(mark);
+      }
+      applySortFilter();
+      crToast(j.starred ? '已收藏' : '已取消收藏', 'success');
+    }).catch(function (err) { crAlert('操作失败：' + err.message); });
+  }
+
+  // 收藏页 / 最近访问页的取消收藏按钮
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-unstar]') : null;
+    if (!b) { return; }
+    var parts = String(b.dataset.unstar).split(':');
+    fetch('/api/star/toggle', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: parts[0], id: Number(parts[1]) })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (j && j.ok) { crToast('已取消收藏', 'success'); setTimeout(function () { location.reload(); }, 600); }
+      else { crAlert((j && j.error) || '操作失败'); }
+    }).catch(function (err) { crAlert('操作失败：' + err.message); });
+  });
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-preview]') : null;
+    if (!b) { return; }
+    openPreview(b.dataset.preview, null);
+  });
+
+  // ==================== 右侧详情面板 ====================
+  var detailEl = document.getElementById('crDetail');
+  var detailItem = null;
+
+  function openDetail(item) {
+    if (!detailEl || !item) { return; }
+    detailItem = item;
+    var isFile = item.dataset.kind === 'file';
+    var name = item.dataset.name || '';
+    var icoImg = item.querySelector('.cr-fi img') || item.querySelector('img');
+    var icoSrc = icoImg ? icoImg.getAttribute('src') : '/icons/file-generic.svg';
+    document.getElementById('crDetailPreview').innerHTML = '<img src="' + icoSrc + '" width="56" height="56" alt="">';
+    document.getElementById('crDetailHeadIco').src = icoSrc;
+    document.getElementById('crDetailName').textContent = name;
+    document.getElementById('crDetailType').textContent = isFile
+      ? (name.indexOf('.') > 0 ? name.split('.').pop().toUpperCase() + ' 文件' : '文件')
+      : '文件夹';
+    document.getElementById('crDetailSize').textContent = isFile ? fmtSize(item.dataset.size) : '—';
+    document.getElementById('crDetailTime').textContent = fmtTime(Number(item.dataset.time || 0));
+    document.getElementById('crDetailOwner').textContent = item.dataset.owner || '—';
+    document.getElementById('crDetailShared').textContent = item.dataset.shared === '1' ? '已生成分享链接' : '未分享';
+
+    var rn = document.getElementById('crDetailRenameInput');
+    rn.value = name;
+    rn.dataset.kind = item.dataset.kind;
+    rn.dataset.id = item.dataset.id;
+
+    var actions = '';
+    if (isFile) {
+      actions += '<button type="button" class="cr-btn cr-btn-primary cr-btn-sm" data-dact="download">下载</button>';
+      actions += '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-dact="preview">预览</button>';
+      actions += '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-dact="share">分享</button>';
+      actions += '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-dact="tag">标签</button>';
+      actions += '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-dact="versions">历史版本</button>';
+    } else {
+      actions += '<button type="button" class="cr-btn cr-btn-primary cr-btn-sm" data-dact="open">打开文件夹</button>';
+      actions += '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-dact="share">分享</button>';
+      actions += '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-dact="zip">打包下载</button>';
+    }
+    actions += '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-dact="star">'
+      + (item.dataset.starred === '1' ? '取消收藏' : '收藏') + '</button>';
+    actions += '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-dact="move">移动到</button>';
+    actions += '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-dact="copyto">复制到</button>';
+    actions += '<button type="button" class="cr-btn cr-btn-danger cr-btn-sm" data-dact="delete">删除</button>';
+    document.getElementById('crDetailActions').innerHTML = actions;
+
+    detailEl.classList.add('is-open');
+    detailEl.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeDetail() {
+    if (!detailEl) { return; }
+    detailEl.classList.remove('is-open');
+    detailEl.setAttribute('aria-hidden', 'true');
+    detailItem = null;
+  }
+
+  if (detailEl) {
+    document.getElementById('crDetailClose').addEventListener('click', closeDetail);
+    document.getElementById('crDetailActions').addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-dact]') : null;
+      if (!b || !detailItem) { return; }
+      var kind = detailItem.dataset.kind, id = detailItem.dataset.id, name = detailItem.dataset.name || '';
+      var act = b.dataset.dact;
+      if (act === 'download') { clickDownload('/download/' + id); }
+      else if (act === 'preview') { openPreview(id, null); }
+      else if (act === 'share') { openShareModal(id, name, kind); }
+      else if (act === 'open') { location.href = '/dashboard?folder=' + encodeURIComponent(id); }
+      else if (act === 'move') { openMoveModal([{ kind: kind, id: id, name: name }], 'move'); }
+      else if (act === 'copyto') { openMoveModal([{ kind: kind, id: id, name: name }], 'copy'); }
+      else if (act === 'delete') { confirmDeleteItem(kind, id, name); }
+      else if (act === 'star') { toggleStar(detailItem); openDetail(detailItem); }
+      else if (act === 'tag') { openTagModal(id, name); }
+      else if (act === 'versions') { openVersionsModal(id, name); }
+      else if (act === 'zip') { downloadZip([], [Number(id)]); }
+    });
+    document.getElementById('crDetailRenameBtn').addEventListener('click', function () {
+      if (!detailItem) { return; }
+      var input = document.getElementById('crDetailRenameInput');
+      var newName = (input.value || '').trim();
+      if (!newName) { crAlert('名称不能为空'); return; }
+      if (newName === detailItem.dataset.name) { crToast('名称未变化'); return; }
+      var kind = detailItem.dataset.kind, id = detailItem.dataset.id;
+      var fd = new URLSearchParams();
+      fd.append('name', newName);
+      fetch('/' + kind + '/' + id + '/rename', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: fd.toString()
+      }).then(function (r) {
+        if (!r.ok) { throw new Error('HTTP ' + r.status); }
+        crToast('已重命名', 'success');
+        setTimeout(function () { location.reload(); }, 600);
+      }).catch(function (err) { crAlert('重命名失败：' + err.message); });
+    });
+  }
+
+  // ==================== 移动到（目录树，懒加载 /api/list） ====================
+  var moveModal = document.getElementById('crMoveModal');
+  var moveTree = document.getElementById('crMoveTree');
+  var moveCurrent = [];
+  var moveTarget = { id: '', name: '全部文件' };
+  var moveMode = 'move';   // move | copy
+
+  function moveRowHtml(f, depth) {
+    return '<button type="button" class="cr-menu-item" data-pick="' + f.id + '" data-pname="' + crEsc(f.name) + '" style="padding-left:' + (8 + depth * 16) + 'px">'
+      + '<span class="move-caret" data-exp="' + f.id + '" style="width:14px;flex:none;text-align:center;opacity:.6;">▸</span>'
+      + ICO.folder + '<span class="cr-truncate">' + crEsc(f.name) + '</span></button>';
+  }
+
+  function markPicked(id) {
+    Array.prototype.forEach.call(moveTree.querySelectorAll('[data-pick]'), function (b) {
+      if (b.dataset.pick === String(id)) {
+        b.style.background = 'var(--cr-primary-weak)';
+        b.style.color = 'var(--cr-primary)';
+      } else {
+        b.style.background = '';
+        b.style.color = '';
+      }
+    });
+  }
+
+  function loadMoveTree() {
+    moveTree.innerHTML = '<div class="cr-loading"><span class="cr-spin"></span>正在加载目录…</div>';
+    fetch('/api/list', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok) { throw new Error((j && j.error) || '加载失败'); }
+      var folders = j.folders || [];
+      var html = '<button type="button" class="cr-menu-item" data-pick="" data-pname="全部文件" style="padding-left:8px">'
+        + '<span style="width:14px;flex:none"></span>' + ICO.folder + '<span>全部文件（根目录）</span></button>';
+      folders.forEach(function (f) { html += moveRowHtml(f, 1); });
+      moveTree.innerHTML = html;
+      moveTarget = { id: '', name: '全部文件' };
+      markPicked('');
+    }).catch(function (err) {
+      moveTree.innerHTML = '<div class="cr-empty" style="padding:22px;"><p>目录加载失败：' + crEsc(err.message) + '</p></div>';
+    });
+  }
+
+  if (moveModal) {
+    moveTree.addEventListener('click', function (e) {
+      var caret = e.target.closest ? e.target.closest('[data-exp]') : null;
+      if (caret) {
+        e.stopPropagation();
+        var fid = caret.dataset.exp;
+        var row = caret.closest('[data-pick]');
+        var wrap = row.nextSibling;
+        if (wrap && wrap.classList && wrap.classList.contains('move-children')) {
+          wrap.parentNode.removeChild(wrap);
+          caret.textContent = '▸';
+          return;
+        }
+        caret.textContent = '▾';
+        var box = document.createElement('div');
+        box.className = 'move-children';
+        box.innerHTML = '<div class="cr-loading" style="padding:10px;"><span class="cr-spin"></span></div>';
+        row.parentNode.insertBefore(box, row.nextSibling);
+        var depth = Math.round((parseInt(row.style.paddingLeft, 10) - 8) / 16) + 1;
+        fetch('/api/list?folderId=' + encodeURIComponent(fid), { credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            var folders = (j && j.folders) || [];
+            if (!folders.length) { box.innerHTML = '<div class="cr-menu-tip">（无子文件夹）</div>'; return; }
+            box.innerHTML = folders.map(function (f) { return moveRowHtml(f, depth); }).join('');
+          })
+          .catch(function () { box.innerHTML = '<div class="cr-menu-tip" style="color:var(--cr-danger);">加载失败</div>'; });
+        return;
+      }
+      var pick = e.target.closest ? e.target.closest('[data-pick]') : null;
+      if (pick) {
+        moveTarget = { id: pick.dataset.pick, name: pick.dataset.pname };
+        markPicked(pick.dataset.pick);
+      }
+    });
+    document.getElementById('crMoveCancel').addEventListener('click', function () { moveModal.style.display = 'none'; });
+    moveModal.addEventListener('click', function (e) { if (e.target === moveModal) { moveModal.style.display = 'none'; } });
+    document.getElementById('crMoveNewFolder').addEventListener('change', function () {
+      document.getElementById('crMoveNewFolderRow').style.display = this.checked ? '' : 'none';
+      if (this.checked) { setTimeout(function () { document.getElementById('crMoveNewFolderName').focus(); }, 30); }
+    });
+    document.getElementById('crMoveOk').addEventListener('click', function () {
+      if (!moveCurrent.length) { moveModal.style.display = 'none'; return; }
+      var target = moveTarget.id ? Number(moveTarget.id) : 0;
+      var useNew = document.getElementById('crMoveNewFolder').checked;
+      var newName = useNew ? (document.getElementById('crMoveNewFolderName').value || '').trim() : '';
+      if (useNew && !newName) { crAlert('请输入新文件夹名称'); return; }
+
+      var btn = this;
+      btn.disabled = true;
+      function finish(folderId) {
+        var jobs = moveCurrent.map(function (it) {
+          var url = it.kind === 'folder'
+            ? (moveMode === 'copy' ? '/api/folder/copy' : '/api/folder/move')
+            : (moveMode === 'copy' ? '/api/file/copy' : '/api/file/move');
+          var body = it.kind === 'folder'
+            ? { id: Number(it.id), parentId: folderId }
+            : { id: Number(it.id), folderId: folderId };
+          return fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          }).then(function (r) { return r.json(); });
+        });
+        Promise.all(jobs).then(function (res) {
+          btn.disabled = false;
+          var bad = res.filter(function (x) { return !x || !x.ok; });
+          if (bad.length) {
+            crAlert('有 ' + bad.length + ' 项' + (moveMode === 'copy' ? '复制' : '移动') + '失败：' + ((bad[0] && bad[0].error) || '未知错误'));
+            return;
+          }
+          moveModal.style.display = 'none';
+          crToast((moveMode === 'copy' ? '已复制 ' : '已移动 ') + res.length + ' 项', 'success');
+          setTimeout(function () { location.reload(); }, 700);
+        }).catch(function (err) {
+          btn.disabled = false;
+          crAlert((moveMode === 'copy' ? '复制失败：' : '移动失败：') + err.message);
+        });
+      }
+
+      if (useNew) {
+        fetch('/api/folder/create', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newName, parentId: target || null })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+          if (!j || !j.ok) { btn.disabled = false; crAlert((j && j.error) || '新建文件夹失败'); return; }
+          finish(j.id ? Number(j.id) : target);
+        }).catch(function (err) { btn.disabled = false; crAlert('新建文件夹失败：' + err.message); });
+      } else {
+        finish(target);
+      }
+    });
+  }
+
+  function openMoveModal(items, mode) {
+    moveCurrent = items || [];
+    moveMode = mode === 'copy' ? 'copy' : 'move';
+    if (!moveModal || !moveCurrent.length) { return; }
+    var kinds = { folder: 0, file: 0 };
+    moveCurrent.forEach(function (it) { kinds[it.kind] = (kinds[it.kind] || 0) + 1; });
+    document.getElementById('crMoveTip').textContent = '将 ' + moveCurrent.length + ' 项（文件夹 '
+      + (kinds.folder || 0) + ' · 文件 ' + (kinds.file || 0) + '）' + (moveMode === 'copy' ? '复制' : '移动') + '到：';
+    var okBtn = document.getElementById('crMoveOk');
+    if (okBtn) { okBtn.textContent = moveMode === 'copy' ? '复制到这里' : '移动到这里'; }
+    document.getElementById('crMoveNewFolder').checked = false;
+    document.getElementById('crMoveNewFolderRow').style.display = 'none';
+    document.getElementById('crMoveNewFolderName').value = '';
+    moveModal.style.display = 'flex';
+    loadMoveTree();
+  }
+  window.openMoveModal = openMoveModal;
+
+  // ==================== 打包下载（服务端流式 ZIP） ====================
+  function downloadZip(fileIds, folderIds) {
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/api/download/zip';
+    form.style.display = 'none';
+    (fileIds || []).forEach(function (id) {
+      var i = document.createElement('input');
+      i.type = 'hidden'; i.name = 'fileIds'; i.value = String(id);
+      form.appendChild(i);
+    });
+    (folderIds || []).forEach(function (id) {
+      var i = document.createElement('input');
+      i.type = 'hidden'; i.name = 'folderIds'; i.value = String(id);
+      form.appendChild(i);
+    });
+    document.body.appendChild(form);
+    form.submit();
+    crToast('正在服务端打包，浏览器将自动开始下载…');
+    setTimeout(function () { if (form.parentNode) { form.parentNode.removeChild(form); } }, 3000);
+  }
+  window.crDownloadZip = downloadZip;
+
+  // ==================== 解压 ZIP 到当前文件夹 ====================
+  function unzipFile(id, name) {
+    crConfirm({
+      title: '解压到当前文件夹',
+      message: '将解压「' + name + '」到当前文件夹，压缩包内的目录结构会被还原。压缩包会保留，可自行删除。',
+      okText: '开始解压'
+    }).then(function (ok) {
+      if (!ok) { return; }
+      crToast('正在解压…');
+      fetch('/api/file/unzip', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: Number(id), folderId: FOLDER_ID || null })
+      }).then(function (r) { return r.json(); }).then(function (j) {
+        if (!j || !j.ok) { crAlert((j && j.error) || '解压失败'); return; }
+        crToast('解压完成，共 ' + j.count + ' 个文件' + (j.skipped ? '（跳过 ' + j.skipped + ' 项）' : ''), 'success');
+        setTimeout(function () { location.reload(); }, 900);
+      }).catch(function (err) { crAlert('解压失败：' + err.message); });
+    });
+  }
+
+  // ==================== 标签管理弹窗 ====================
+  var tagModal = document.getElementById('crTagModal');
+  var tagListEl = document.getElementById('crTagList');
+  var tagFileId = null;
+  var tagChecked = {};
+  var TAG_COLORS = ['#2b7de9', '#22c55e', '#f59e0b', '#e5484d', '#8b5cf6', '#14b8a6'];
+
+  function renderTagList(tags) {
+    if (!tags.length) {
+      tagListEl.innerHTML = '<div class="cr-menu-tip">还没有标签，先创建一个吧</div>';
+      return;
+    }
+    tagListEl.innerHTML = tags.map(function (t) {
+      var on = !!tagChecked[t.id];
+      return '<label class="cr-check cr-tag-row">'
+        + '<input type="checkbox" data-tagid="' + t.id + '"' + (on ? ' checked' : '') + '>'
+        + '<span class="cr-chip-dot" style="background:' + crEsc(t.color || '#2b7de9') + '"></span>'
+        + '<span>' + crEsc(t.name) + '</span>'
+        + '<button type="button" class="cr-tag-del" data-tagdel="' + t.id + '" title="删除标签">✕</button>'
+        + '</label>';
+    }).join('');
+  }
+
+  function loadTagModal() {
+    tagListEl.innerHTML = '<div class="cr-loading"><span class="cr-spin"></span>加载中…</div>';
+    fetch('/api/tag/list', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok) { tagListEl.innerHTML = '<div class="cr-menu-tip">加载失败</div>'; return; }
+      renderTagList(j.tags || []);
+    }).catch(function () { tagListEl.innerHTML = '<div class="cr-menu-tip">加载失败</div>'; });
+  }
+
+  function openTagModal(fileId, name) {
+    if (!tagModal) { return; }
+    tagFileId = fileId;
+    tagChecked = {};
+    var item = document.querySelector('.pan-g-item[data-kind="file"][data-id="' + fileId + '"]');
+    var cur = (item && item.dataset.tags) ? item.dataset.tags.split(',') : [];
+    cur.forEach(function (t) { if (t) { tagChecked[Number(t)] = true; } });
+    document.getElementById('crTagFileName').textContent = name || '';
+    tagModal.style.display = 'flex';
+    loadTagModal();
+  }
+  window.openTagModal = openTagModal;
+
+  if (tagModal) {
+    tagListEl.addEventListener('change', function (e) {
+      var cb = e.target.closest ? e.target.closest('[data-tagid]') : null;
+      if (!cb) { return; }
+      var id = Number(cb.dataset.tagid);
+      if (cb.checked) { tagChecked[id] = true; } else { delete tagChecked[id]; }
+    });
+    tagListEl.addEventListener('click', function (e) {
+      var del = e.target.closest ? e.target.closest('[data-tagdel]') : null;
+      if (!del) { return; }
+      var id = Number(del.dataset.tagdel);
+      crConfirm({ title: '删除标签', message: '删除该标签？会同时移除所有文件上的此标签。', danger: true, okText: '确认删除' }).then(function (ok) {
+        if (!ok) { return; }
+        fetch('/api/tag/delete', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: id })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+          if (j && j.ok) { delete tagChecked[id]; loadTagModal(); crToast('已删除标签', 'success'); }
+          else { crAlert((j && j.error) || '删除失败'); }
+        });
+      });
+    });
+    document.getElementById('crTagNewBtn').addEventListener('click', function () {
+      var input = document.getElementById('crTagNewName');
+      var name = (input.value || '').trim();
+      if (!name) { crAlert('请输入标签名称'); return; }
+      var color = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)];
+      fetch('/api/tag/create', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, color: color })
+      }).then(function (r) { return r.json(); }).then(function (j) {
+        if (!j || !j.ok) { crAlert((j && j.error) || '创建失败'); return; }
+        tagChecked[j.tag.id] = true;
+        input.value = '';
+        loadTagModal();
+      }).catch(function (err) { crAlert('创建失败：' + err.message); });
+    });
+    document.getElementById('crTagCancel').addEventListener('click', function () { tagModal.style.display = 'none'; });
+    tagModal.addEventListener('click', function (e) { if (e.target === tagModal) { tagModal.style.display = 'none'; } });
+    document.getElementById('crTagSave').addEventListener('click', function () {
+      var ids = Object.keys(tagChecked).map(Number);
+      fetch('/api/tag/assign', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId: Number(tagFileId), tagIds: ids })
+      }).then(function (r) { return r.json(); }).then(function (j) {
+        if (!j || !j.ok) { crAlert((j && j.error) || '保存失败'); return; }
+        tagModal.style.display = 'none';
+        crToast('标签已保存', 'success');
+        setTimeout(function () { location.reload(); }, 700);
+      }).catch(function (err) { crAlert('保存失败：' + err.message); });
+    });
+  }
+
+  // ==================== 历史版本弹窗 ====================
+  var verModal = document.getElementById('crVerModal');
+  function openVersionsModal(fileId, name) {
+    if (!verModal) { return; }
+    document.getElementById('crVerFileName').textContent = name || '';
+    var listEl = document.getElementById('crVerList');
+    listEl.innerHTML = '<div class="cr-loading"><span class="cr-spin"></span>加载中…</div>';
+    verModal.style.display = 'flex';
+    fetch('/api/file/versions?id=' + encodeURIComponent(fileId), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); }).then(function (j) {
+        if (!j || !j.ok) { listEl.innerHTML = '<div class="cr-menu-tip">加载失败</div>'; return; }
+        var rows = '<div class="cr-ver-row cr-ver-cur"><span class="cr-ver-tag">当前</span>'
+          + '<span class="cr-ver-size">' + fmtSize(j.file.file_size) + '</span>'
+          + '<span class="cr-ver-time">' + crEsc(j.file.uploaded_at || '') + '</span>'
+          + '<span class="cr-ver-ops"><a class="cr-btn cr-btn-ghost cr-btn-sm" href="/download/' + j.file.id + '">下载</a></span></div>';
+        if (!j.versions.length) {
+          rows += '<div class="cr-menu-tip">暂无历史版本（同名文件重新上传后会自动保留旧版本）</div>';
+        } else {
+          j.versions.forEach(function (v) {
+            rows += '<div class="cr-ver-row"><span class="cr-ver-tag">V</span>'
+              + '<span class="cr-ver-size">' + fmtSize(v.file_size) + '</span>'
+              + '<span class="cr-ver-time">' + crEsc(v.created_at || '') + '</span>'
+              + '<span class="cr-ver-ops">'
+              + '<a class="cr-btn cr-btn-ghost cr-btn-sm" href="/api/file/version/download?id=' + v.id + '">下载此版本</a>'
+              + '<button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" data-verrestore="' + v.id + '">恢复此版本</button>'
+              + '</span></div>';
+          });
+        }
+        listEl.innerHTML = rows;
+      }).catch(function () { listEl.innerHTML = '<div class="cr-menu-tip">加载失败</div>'; });
+  }
+  if (verModal) {
+    document.getElementById('crVerClose').addEventListener('click', function () { verModal.style.display = 'none'; });
+    verModal.addEventListener('click', function (e) { if (e.target === verModal) { verModal.style.display = 'none'; } });
+    document.getElementById('crVerList').addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-verrestore]') : null;
+      if (!b) { return; }
+      crConfirm({
+        title: '恢复历史版本',
+        message: '将把该历史版本恢复为当前版本（当前版本会转入历史记录）。确定继续？',
+        okText: '确认恢复'
+      }).then(function (ok) {
+        if (!ok) { return; }
+        fetch('/api/file/version/restore', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: Number(b.dataset.verrestore) })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+          if (!j || !j.ok) { crAlert((j && j.error) || '恢复失败'); return; }
+          verModal.style.display = 'none';
+          crToast('已恢复该版本', 'success');
+          setTimeout(function () { location.reload(); }, 800);
+        }).catch(function (err) { crAlert('恢复失败：' + err.message); });
+      });
+    });
+  }
+
+  // ==================== 外观设置（写入既有 cr_theme，复用 cr-theme.js） ====================
+  var themeCards = document.getElementById('crThemeCards');
+  function themeChoice() {
+    try {
+      var v = localStorage.getItem('cr_theme');
+      return (v === 'light' || v === 'dark') ? v : 'system';
+    } catch (e) { return 'system'; }
+  }
+  function syncThemeCards() {
+    if (!themeCards) { return; }
+    var cur = themeChoice();
+    Array.prototype.forEach.call(themeCards.querySelectorAll('[data-theme-choice]'), function (b) {
+      b.classList.toggle('is-active', b.dataset.themeChoice === cur);
+    });
+  }
+  if (themeCards) {
+    themeCards.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-theme-choice]') : null;
+      if (!b) { return; }
+      var v = b.dataset.themeChoice;
+      if (typeof window.crSetTheme === 'function') {
+        window.crSetTheme(v);
+      } else {
+        try {
+          if (v === 'system') { localStorage.removeItem('cr_theme'); } else { localStorage.setItem('cr_theme', v); }
+        } catch (e2) { }
+        if (v === 'system') { document.documentElement.removeAttribute('data-theme'); }
+        else { document.documentElement.setAttribute('data-theme', v); }
+      }
+      syncThemeCards();
+      var msg = document.getElementById('themeMsg');
+      if (msg) {
+        msg.style.color = 'var(--cr-success)';
+        msg.textContent = '已切换为「' + (v === 'light' ? '浅色' : (v === 'dark' ? '深色' : '跟随系统')) + '」';
+        setTimeout(function () { msg.textContent = ''; }, 2200);
+      }
+    });
+    syncThemeCards();
+    document.addEventListener('cr:themechange', syncThemeCards);
+  }
+
+  // ==================== 顶栏「新建」下拉（新建文件夹 / 上传文件 / 上传文件夹） ====================
+  (function () {
+    var btn = document.getElementById('crNewBtn');
+    var menu = document.getElementById('crNewMenu');
+    if (!btn || !menu) { return; }
+    function closeMenu() {
+      menu.classList.remove('is-open');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (menu.classList.contains('is-open')) { closeMenu(); return; }
+      menu.classList.add('is-open');
+      btn.setAttribute('aria-expanded', 'true');
+    });
+    menu.addEventListener('click', function (e) {
+      var it = e.target.closest ? e.target.closest('[data-new]') : null;
+      if (!it) { return; }
+      var act = it.getAttribute('data-new');
+      closeMenu();
+      if (act === 'folder') { openNewFolderModal(); return; }
+      if (act === 'upload') { var fi = document.getElementById('panFileInput'); if (fi) { fi.click(); } return; }
+      if (act === 'uploaddir') { var di = document.getElementById('panDirInput'); if (di) { di.click(); } return; }
+    });
+    document.addEventListener('click', function (e) {
+      if (menu.classList.contains('is-open') && !menu.contains(e.target) && e.target !== btn) { closeMenu(); }
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeMenu(); } });
+    window.addEventListener('scroll', function () { closeMenu(); }, true);
+  })();
+})();
+</script>
+
+<script>
+(function() {
+  // ===== 文件预览 =====
+  var pvModal = document.getElementById('previewModal');
+  window.openPreview = function(fid, teamId) {
+    var api = (teamId ? '/team/' + teamId + '/preview/' + fid : '/preview/' + fid) + '?office=1';
+    var dl = teamId ? '/team/' + teamId + '/download/' + fid : '/download/' + fid;
+    var body = document.getElementById('pvBody');
+    var openBtn = document.getElementById('pvOpen');
+    var dlBtn = document.getElementById('pvDl');
+    body.innerHTML = '<p style="color:#8a99ab;padding:40px;">加载中…</p>';
+    openBtn.style.display = 'none'; dlBtn.style.display = 'none';
+    document.getElementById('pvTitle').textContent = '预览';
+    pvModal.style.display = 'flex';
+    fetch(api).then(function(r) { return r.json(); }).then(function(d) {
+      if (!d.ok) {
+        body.innerHTML = '<div style="padding:50px 20px;color:#dfe7ef;"><div style="font-size:40px;">📄</div><p style="margin-top:10px;">' + (d.unsupported ? '该格式暂不支持在线预览' : (d.error || '预览失败')) + '</p></div>';
+        dlBtn.href = dl; dlBtn.style.display = 'inline-block';
+        return;
+      }
+      document.getElementById('pvTitle').textContent = d.name;
+      var inner = '';
+      if (d.kind === 'image') inner = '<img src="' + d.url + '" style="max-width:100%;max-height:66vh;display:block;margin:0 auto;" alt="">';
+      else if (d.kind === 'pdf') inner = '<iframe src="' + d.url + '" style="width:100%;height:64vh;border:none;background:#fff;display:block;"></iframe>';
+      else if (d.kind === 'video') inner = '<video src="' + d.url + '" controls autoplay preload="metadata" playsinline style="width:100%;max-height:64vh;background:#000;display:block;"></video>';
+      else if (d.kind === 'audio') inner = '<audio src="' + d.url + '" controls autoplay preload="metadata" style="width:100%;display:block;margin-top:20vh;"></audio>';
+      else if (d.kind === 'office') {
+        // Office 文档：服务端本地解析预览，在新页面打开完整预览页
+        var officeUrl = d.officeUrl || d.url || ('/office/' + fid);
+        inner = '<div style="padding:44px 20px;text-align:center;color:#dfe7ef;">'
+          + '<div style="font-size:40px;">📄</div>'
+          + '<p style="margin:10px 0 16px;">' + (d.tooLarge ? '文件较大，建议下载后查看；仍可打开服务端在线预览（可能较慢）。' : 'Office 文档由 CC网盘服务端本地解析，将在新页面打开预览。') + '</p>'
+          + '<a class="cr-btn cr-btn-primary" href="' + officeUrl + '" target="_blank" rel="noopener">打开在线预览</a></div>';
+        body.innerHTML = inner;
+        openBtn.href = officeUrl; openBtn.style.display = 'inline-block';
+        dlBtn.href = dl; dlBtn.style.display = 'inline-block';
+        return;
+      }
+      else if (d.kind === 'text') {
+        // 文本类：走服务端读取（上限 2MB），避免浏览器直接渲染 S3 预签名页面
+        inner = '<pre class="cr-textview">加载中…</pre>';
+        body.innerHTML = inner;
+        openBtn.href = d.url; openBtn.style.display = 'inline-block';
+        dlBtn.href = dl; dlBtn.style.display = 'inline-block';
+        fetch('/preview/' + fid + '/text', { credentials: 'same-origin' }).then(function (r2) { return r2.json(); }).then(function (t) {
+          var pre = body.querySelector('.cr-textview');
+          if (!t || !t.ok) {
+            if (pre) { pre.textContent = (t && t.error) || '文本内容读取失败，请下载查看'; }
+            return;
+          }
+          if (pre) {
+            pre.textContent = t.text || '（空文件）';
+            if (t.truncated) {
+              var tip = document.createElement('div');
+              tip.className = 'cr-hint';
+              tip.style.marginTop = '8px';
+              tip.textContent = '文件较大，仅显示前 2MB 内容，完整内容请下载查看。';
+              pre.parentNode.insertBefore(tip, pre.nextSibling);
+            }
+          }
+        }).catch(function () {
+          var pre = body.querySelector('.cr-textview');
+          if (pre) { pre.textContent = '文本内容读取失败，请下载查看'; }
+        });
+        return;
+      }
+      body.innerHTML = inner;
+      openBtn.href = d.url; openBtn.style.display = 'inline-block';
+      dlBtn.href = dl; dlBtn.style.display = 'inline-block';
+    }).catch(function() {
+      body.innerHTML = '<div style="padding:50px 20px;color:#dfe7ef;">预览失败，请下载查看</div>';
+      dlBtn.href = dl; dlBtn.style.display = 'inline-block';
+    });
+  };
+  window.closePreview = function() { pvModal.style.display = 'none'; };
+  pvModal.addEventListener('click', function(e) { if (e.target === pvModal) closePreview(); });
+
+  // ===== 分享链接 =====
+  var modal = document.getElementById('shareModal');
+  var currentShareFileId = null;
+  var currentShareKind = 'file';
+  var shareExpireDays = 0;
+  var shareCodeMode = 'keep';
+
+  function syncShareSegs() {
+    Array.prototype.forEach.call(document.querySelectorAll('#crShareExpire .cr-seg-btn'), function (b) {
+      b.classList.toggle('is-active', Number(b.dataset.exp) === shareExpireDays);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#crShareCodeMode .cr-seg-btn'), function (b) {
+      b.classList.toggle('is-active', b.dataset.code === shareCodeMode);
+    });
+    var inp = document.getElementById('crShareCodeInput');
+    if (inp) { inp.style.display = shareCodeMode === 'custom' ? '' : 'none'; }
+  }
+
+  function shareMetaText(data) {
+    var t = '当前：' + (data.expiresAt ? ('有效期至 ' + data.expiresAt) : '永久有效') + ' · 已下载 ' + (data.downloadCount || 0) + ' 次';
+    document.getElementById('shareMetaText').textContent = t;
+  }
+
+  function renderShareResult(data) {
+    var url = window.location.origin + data.url;
+    document.getElementById('shareLinkInput').value = url;
+    document.getElementById('sharePwdInput').value = data.password ? data.password : '（无）';
+    document.getElementById('shareModalTitle').innerHTML = '<img src="/icons/share.svg" width="18" height="18" alt="">'
+      + (data.kind === 'folder' ? '分享文件夹' : '分享文件');
+    if (data.expiresAt) { shareExpireDays = 0; }
+    shareMetaText(data);
+    syncShareSegs();
+  }
+
+  function requestShare(extra) {
+    var body = { fileId: null, folderId: null };
+    if (currentShareKind === 'folder') { body.folderId = currentShareFileId; }
+    else { body.fileId = currentShareFileId; }
+    Object.keys(extra || {}).forEach(function (k) { body[k] = extra[k]; });
+    return fetch('/share/create', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function (resp) {
+      if (!resp.ok) return resp.json().then(function (d) { throw new Error(d.error || '生成失败'); });
+      return resp.json();
+    });
+  }
+
+  window.openShareModal = function (id, name, kind) {
+    currentShareFileId = id;
+    currentShareKind = kind === 'folder' ? 'folder' : 'file';
+    shareExpireDays = 0;
+    shareCodeMode = 'keep';
+    syncShareSegs();
+    document.getElementById('shareFileName').textContent = name || '';
+    document.getElementById('shareModalTitle').innerHTML = '<img src="/icons/share.svg" width="18" height="18" alt="">'
+      + (currentShareKind === 'folder' ? '分享文件夹' : '分享文件');
+    document.getElementById('shareLinkInput').value = '正在生成链接...';
+    document.getElementById('sharePwdInput').value = '----';
+    document.getElementById('shareStatus').textContent = '';
+    modal.style.display = 'flex';
+
+    requestShare({}).then(function (data) {
+      renderShareResult(data);
+    }).catch(function (err) {
+      document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-danger);">' + crEsc(err.message) + '</span>';
+      document.getElementById('shareLinkInput').value = '';
+    });
+  };
+
+  (function bindShareSegs() {
+    var expEl = document.getElementById('crShareExpire');
+    if (expEl) {
+      expEl.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('[data-exp]') : null;
+        if (!b) { return; }
+        shareExpireDays = Number(b.dataset.exp);
+        syncShareSegs();
+      });
+    }
+    var codeEl = document.getElementById('crShareCodeMode');
+    if (codeEl) {
+      codeEl.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('[data-code]') : null;
+        if (!b) { return; }
+        shareCodeMode = b.dataset.code;
+        syncShareSegs();
+      });
+    }
+    var applyBtn = document.getElementById('crShareApply');
+    if (applyBtn) {
+      applyBtn.addEventListener('click', function () {
+        if (!currentShareFileId) { return; }
+        var extra = { expireDays: shareExpireDays, codeMode: shareCodeMode };
+        if (shareCodeMode === 'custom') {
+          var code = (document.getElementById('crShareCodeInput').value || '').trim();
+          if (!code) { crAlert('请输入自定义提取码'); return; }
+          extra.code = code;
+        }
+        applyBtn.disabled = true;
+        requestShare(extra).then(function (data) {
+          applyBtn.disabled = false;
+          renderShareResult(data);
+          document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-success);">设置已应用</span>';
+        }).catch(function (err) {
+          applyBtn.disabled = false;
+          document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-danger);">' + crEsc(err.message) + '</span>';
+        });
+      });
+    }
+  })();
+
+  window.closeShareModal = function() {
+    modal.style.display = 'none';
+    currentShareFileId = null;
+  };
+
+  window.copyShareLink = function() {
+    var input = document.getElementById('shareLinkInput');
+    if (!input.value || input.value.indexOf('http') !== 0) return;
+    input.select();
+    input.setSelectionRange(0, 99999);
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    if (!ok && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(input.value).then(function () {
+        document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-success);">链接已复制（请连同下方提取码一起发给对方）</span>';
+      }).catch(function () {
+        document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-text-2);">请手动复制链接</span>';
+      });
+      return;
+    }
+    document.getElementById('shareStatus').innerHTML = ok
+      ? '<span style="color:var(--cr-success);">链接已复制（请连同下方提取码一起发给对方）</span>'
+      : '<span style="color:var(--cr-text-2);">请手动复制链接</span>';
+  };
+
+  window.copySharePwd = function() {
+    var input = document.getElementById('sharePwdInput');
+    if (!input.value || input.value === '----' || input.value === '（无）') return;
+    input.select();
+    input.setSelectionRange(0, 99999);
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    if (!ok && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(input.value).then(function () {
+        document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-success);">提取码已复制</span>';
+      });
+      return;
+    }
+    document.getElementById('shareStatus').innerHTML = ok
+      ? '<span style="color:var(--cr-success);">提取码已复制</span>'
+      : '<span style="color:var(--cr-text-2);">请手动复制提取码</span>';
+  };
+
+  window.revokeShare = function() {
+    if (!currentShareFileId) return;
+    crConfirm({
+      title: '撤销分享',
+      message: '确定撤销该分享链接？撤销后链接立即失效。',
+      danger: true,
+      okText: '确认撤销'
+    }).then(function (ok) {
+      if (!ok) { return; }
+      var body = currentShareKind === 'folder' ? { folderId: currentShareFileId } : { fileId: currentShareFileId };
+      fetch('/share/revoke', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).then(function(resp) {
+        if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.error || '撤销失败'); });
+        return resp.json();
+      }).then(function() {
+        document.getElementById('shareLinkInput').value = '';
+        document.getElementById('sharePwdInput').value = '----';
+        document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-success);">分享已撤销，链接已失效</span>';
+      }).catch(function(err) {
+        document.getElementById('shareStatus').innerHTML = '<span style="color:var(--cr-danger);">' + crEsc(err.message) + '</span>';
+      });
+    });
+  };
+
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) closeShareModal();
+  });
+})();
+</script>
+
+<script>
+(function() {
+  // ===== 个人资料（头像 / 昵称）=====
+  function $(id) { return document.getElementById(id); }
+  function pm(msg, ok) {
+    var el = $('profileMsg');
+    if (!el) return;
+    el.style.color = ok ? 'var(--cr-success)' : 'var(--cr-danger)';
+    el.textContent = msg || '';
+  }
+  function xhrJson(method, url, body, okFn, errFn) {
+    var x = new XMLHttpRequest();
+    x.open(method, url);
+    x.setRequestHeader('Accept', 'application/json');
+    if (body && !(body instanceof FormData)) {
+      x.setRequestHeader('Content-Type', 'application/json');
+    }
+    x.onload = function() {
+      var j = null;
+      try { j = JSON.parse(x.responseText); } catch (e) { }
+      if (x.status >= 200 && x.status < 300 && j && j.ok) { if (okFn) okFn(j); }
+      else { if (errFn) errFn((j && j.error) || '操作失败'); }
+    };
+    x.onerror = function() { if (errFn) errFn('网络错误，请重试'); };
+    x.send(body ? (body instanceof FormData ? body : JSON.stringify(body)) : null);
+  }
+  function bindProfile() {
+    var inp = $('avatarInput'), btn = $('saveNicknameBtn'), ni = $('nicknameInput');
+    if (inp) {
+      inp.addEventListener('change', function() {
+        var f = inp.files && inp.files[0];
+        if (!f) return;
+        if (!/^image\//i.test(f.type)) { pm('仅支持图片文件', false); return; }
+        if (f.size > 5 * 1024 * 1024) { pm('图片不能超过5MB', false); return; }
+        var fd = new FormData();
+        fd.append('avatar', f);
+        pm('上传中…', true);
+        inp.disabled = true;
+        xhrJson('POST', '/api/account/avatar', fd, function() {
+          pm('头像已更新', true);
+          setTimeout(function() { location.reload(); }, 600);
+        }, function(e) { pm(e, false); inp.disabled = false; });
+      });
+    }
+    if (btn && ni) {
+      btn.addEventListener('click', function() {
+        var v = (ni.value || '').trim();
+        if (!v) { pm('昵称不能为空', false); return; }
+        xhrJson('POST', '/api/account/profile', { nickname: v }, function() {
+          pm('昵称已保存', true);
+          setTimeout(function() { location.reload(); }, 600);
+        }, function(e) { pm(e, false); });
+      });
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindProfile);
+  } else {
+    bindProfile();
+  }
+})();
+</script>
+
+<%- include('partials/cr-shell-foot') %>

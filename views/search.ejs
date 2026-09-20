@@ -1,0 +1,216 @@
+<%- include('partials/cr-shell-head', { crActive: 'search' }) %>
+  <header class="cr-topbar">
+    <button type="button" class="cr-hamburger" data-cr-drawer-open title="打开菜单" aria-label="打开菜单">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M4.6 5.6h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 10.5h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3zM4.6 15.4h14.8a1.5 1.5 0 0 1 0 3H4.6a1.5 1.5 0 0 1 0-3z"/></svg>
+    </button>
+    <nav class="cr-crumb" aria-label="面包屑">
+      <a class="cr-crumb-item" href="/dashboard">文件</a>
+      <span class="cr-crumb-sep">/</span>
+      <span class="cr-crumb-item is-current">搜索</span>
+    </nav>
+
+    <div class="cr-search" style="flex:1;max-width:520px;width:auto;">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M4.8 10.8a6 6 0 1 0 12 0a6 6 0 1 0-12 0zM6.9 10.8a3.9 3.9 0 1 0 7.8 0a3.9 3.9 0 1 0-7.8 0z"/><path d="M19.26 14.74L19.26 14.74A1.2 1.2 0 0 1 19.26 16.43L16.43 19.26A1.2 1.2 0 0 1 14.74 19.26L14.74 19.26A1.2 1.2 0 0 1 14.74 17.57L17.57 14.74A1.2 1.2 0 0 1 19.26 14.74Z"/></svg>
+      <input id="q" type="search" placeholder="搜索文件 / 文件夹（中英文均可）" autocomplete="off" autocapitalize="off" autocorrect="off" aria-label="搜索关键词">
+      <span id="clear" style="display:none;cursor:pointer;color:var(--cr-muted);padding:0 4px;">✕</span>
+    </div>
+    <button type="button" id="go" class="cr-btn cr-btn-primary">搜索</button>
+
+    <div class="cr-top-actions">
+      <%- include('partials/cr-theme-btn') %>
+      <%- include('partials/cr-user-menu') %>
+    </div>
+  </header>
+
+  <div class="cr-content">
+    <div class="cr-toolbar">
+      <span class="cr-toolbar-sub">支持搜索个人文件、文件夹与所属团队文件</span>
+      <span class="cr-spring"></span>
+      <button type="button" class="cr-btn cr-btn-ghost cr-btn-sm" id="cancel">返回文件</button>
+    </div>
+    <div id="wrap"></div>
+  </div>
+
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var HIST_KEY = 'teamcloud_search_history';
+  var timer = null, token = 0, lastQuery = '';
+
+  function history(){
+    try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch(e){ return []; }
+  }
+  function saveHist(q){
+    var h = history().filter(function(x){ return x !== q; });
+    h.unshift(q); if (h.length > 10) h.length = 10;
+    try { localStorage.setItem(HIST_KEY, JSON.stringify(h)); } catch(e){}
+  }
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+    });
+  }
+  function iconFor(kind){
+    if (kind === 'folder') { return '<span class="cr-fi cr-fi--folder"><img src="/icons/folder.svg" width="20" height="20" alt=""></span>'; }
+    if (kind === 'team') { return '<span class="cr-fi cr-fi--video"><img src="/icons/users.svg" width="20" height="20" alt=""></span>'; }
+    return '<span class="cr-fi cr-fi--doc"><img src="/icons/file-generic.svg" width="20" height="20" alt=""></span>';
+  }
+  function state(msg, retryFn){
+    var w = $('wrap');
+    w.innerHTML = '<div class="cr-card"><div class="cr-empty"><img src="/icons/empty.svg" width="56" height="56" alt=""><p>'
+      + esc(msg).replace(/\n/g, '<br>') + '</p>'
+      + (retryFn ? '<p style="margin-top:14px;"><button type="button" class="cr-btn cr-btn-primary" id="retryBtn">重试</button></p>' : '')
+      + '</div></div>';
+    if (retryFn) { $('retryBtn').onclick = retryFn; }
+  }
+  function loading(q){
+    $('wrap').innerHTML = '<div class="cr-card"><div class="cr-empty"><p>正在搜索 “' + esc(q) + '” …</p></div></div>';
+  }
+  function group(title, total, rowsHtml){
+    return '<div class="cr-card" style="margin-bottom:14px;">'
+      + '<div class="cr-card-head"><h3>' + esc(title) + '</h3><span class="cr-spring"></span><span class="cr-hint">' + total + ' 项</span></div>'
+      + '<div class="cr-table-scroll"><table class="cr-table"><thead><tr>'
+      + '<th>名称</th><th class="cr-col-size">来源</th><th class="cr-col-ops">操作</th>'
+      + '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div></div>';
+  }
+
+  // 首页：搜索历史
+  function home(){
+    var h = history();
+    if (!h.length) { state('输入关键词搜索个人文件、文件夹与团队文件\n支持中英文与数字混合'); return; }
+    var html = '<div class="cr-card"><div class="cr-card-head"><h3>搜索历史</h3><span class="cr-spring"></span>'
+      + '<button type="button" class="cr-btn cr-btn-text cr-btn-sm" id="clearHist">清空历史</button></div>'
+      + '<div class="cr-table-scroll"><table class="cr-table"><tbody>';
+    h.forEach(function(x, i){
+      html += '<tr data-hist="' + esc(x) + '" style="cursor:pointer;">'
+        + '<td><div class="cr-name"><span class="cr-fi cr-fi--other"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" fill-rule="evenodd" aria-hidden="true"><path d="M12 4.6a7.4 7.4 0 1 0 0 14.8 7.4 7.4 0 0 0 0-14.8zM12 6.4a5.6 5.6 0 1 0 0 11.2 5.6 5.6 0 0 0 0-11.2zM11.05 8.2L12.95 8.2L12.95 11.05L15.1 11.05L15.1 12.95L11.05 12.95Z"/></svg></span>'
+        + '<span class="cr-name-text">' + esc(x) + '</span></div></td>'
+        + '<td class="cr-col-size">历史记录</td><td class="cr-col-ops"></td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+    $('wrap').innerHTML = html;
+    Array.prototype.forEach.call($('wrap').querySelectorAll('[data-hist]'), function(tr){
+      tr.onclick = function(){ $('q').value = tr.getAttribute('data-hist'); search(tr.getAttribute('data-hist')); };
+    });
+    $('clearHist').onclick = function(){ try { localStorage.removeItem(HIST_KEY); } catch(e){} home(); };
+  }
+
+  function doSuggest(q){
+    clearTimeout(timer);
+    var my = ++token;
+    timer = setTimeout(function(){
+      var x = new XMLHttpRequest();
+      x.open('GET', '/api/search/suggest?q=' + encodeURIComponent(q));
+      x.onload = function(){
+        if (my !== token) return;
+        var j = null; try { j = JSON.parse(x.responseText); } catch(e){}
+        if (!j || !j.ok) return;
+        renderSuggest(q, j.items || []);
+      };
+      x.onerror = function(){ if (my === token) renderSuggest(q, []); };
+      x.send();
+    }, 220);
+  }
+
+  function renderSuggest(q, items){
+    if (!items.length) { state('暂无匹配建议，回车直接搜索'); return; }
+    var html = group('搜索建议', items.length, items.map(function(it){
+      var kind = it.type === 'folder' ? 'folder' : (it.type === 'team' ? 'team' : 'file');
+      var label = kind === 'folder' ? '文件夹' : (kind === 'team' ? '团队文件' : '个人文件');
+      return '<tr data-sug="' + esc(it.text) + '" style="cursor:pointer;">'
+        + '<td><div class="cr-name">' + iconFor(kind) + '<span class="cr-name-text">' + esc(it.text) + '</span></div></td>'
+        + '<td class="cr-col-size">' + label + '</td><td class="cr-col-ops"></td></tr>';
+    }).join(''));
+    $('wrap').innerHTML = html;
+    Array.prototype.forEach.call($('wrap').querySelectorAll('[data-sug]'), function(tr){
+      tr.onclick = function(){ $('q').value = tr.getAttribute('data-sug'); search(tr.getAttribute('data-sug')); };
+    });
+  }
+
+  function search(q){
+    q = (q || '').trim(); if (!q) return;
+    saveHist(q);
+    lastQuery = q;
+    var my = ++token;
+    loading(q);
+    var x = new XMLHttpRequest();
+    x.open('GET', '/api/search?q=' + encodeURIComponent(q));
+    x.onload = function(){
+      if (my !== token) return;
+      var j = null; try { j = JSON.parse(x.responseText); } catch(e){}
+      if (!j || !j.ok) { state((j && j.error) || '搜索失败', function(){ search(q); }); return; }
+      render(j);
+    };
+    x.onerror = function(){ if (my === token) state('网络不稳定，搜索失败，请稍后重试', function(){ search(q); }); };
+    x.send();
+  }
+
+  function render(j){
+    var folders = j.folders || [], files = j.files || [], team = j.teamFiles || [];
+    var total = folders.length + files.length + team.length;
+    var html = '<div class="cr-toolbar"><span class="cr-toolbar-sub">“' + esc(j.q) + '” 的搜索结果，共 ' + total + ' 项</span></div>';
+    if (!total) { state('没有找到相关内容\n换个关键词试试吧'); return; }
+
+    if (folders.length) {
+      html += group('文件夹', folders.length, folders.map(function(f){
+        return '<tr>'
+          + '<td><div class="cr-name">' + iconFor('folder')
+          + '<a class="cr-name-text" href="/dashboard?folder=' + encodeURIComponent(f.id) + '" title="' + esc(f.name) + '">' + esc(f.name) + '</a></div></td>'
+          + '<td class="cr-col-size">文件夹</td>'
+          + '<td class="cr-col-ops"><div class="cr-row-ops"><a class="cr-btn cr-btn-ghost cr-btn-sm" href="/dashboard?folder=' + encodeURIComponent(f.id) + '">打开</a></div></td>'
+          + '</tr>';
+      }).join(''));
+    }
+    if (files.length) {
+      html += group('文件', files.length, files.map(function(f){
+        var url = '/api/download/proxy/' + f.id;
+        return '<tr>'
+          + '<td><div class="cr-name">' + iconFor('file')
+          + '<a class="cr-name-text" href="' + url + '" title="' + esc(f.filename) + '">' + esc(f.filename) + '</a></div></td>'
+          + '<td class="cr-col-size">个人文件</td>'
+          + '<td class="cr-col-ops"><div class="cr-row-ops"><a class="cr-btn cr-btn-ghost cr-btn-sm" href="' + url + '">下载</a></div></td>'
+          + '</tr>';
+      }).join(''));
+    }
+    if (team.length) {
+      html += group('团队文件', team.length, team.map(function(f){
+        var url = '/api/team/' + f.teamId + '/download/proxy/' + f.id;
+        return '<tr>'
+          + '<td><div class="cr-name">' + iconFor('team')
+          + '<a class="cr-name-text" href="' + url + '" title="' + esc(f.filename || '') + '">' + esc(f.filename || '') + '</a></div></td>'
+          + '<td class="cr-col-size">团队·' + esc(f.teamName || '') + '</td>'
+          + '<td class="cr-col-ops"><div class="cr-row-ops"><a class="cr-btn cr-btn-ghost cr-btn-sm" href="' + url + '">下载</a></div></td>'
+          + '</tr>';
+      }).join(''));
+    }
+    $('wrap').innerHTML = html;
+  }
+
+  $('q').addEventListener('input', function(){
+    var v = this.value.trim();
+    $('clear').style.display = this.value.length > 0 ? 'block' : 'none';
+    clearTimeout(timer);
+    if (!v) { ++token; home(); }
+    else { doSuggest(v); }
+  });
+  $('clear').onclick = function(){ var q = $('q'); q.value = ''; q.focus(); $('clear').style.display = 'none'; ++token; home(); };
+  $('go').onclick = function(){ search($('q').value); };
+  $('cancel').onclick = function(){ location.href = '/dashboard'; };
+  $('q').addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); search(this.value); } });
+
+  // 支持顶栏搜索框跳转过来：/search?q=关键词
+  var initQ = '';
+  try {
+    var m = /[?&]q=([^&]*)/.exec(location.search);
+    if (m) { initQ = decodeURIComponent(m[1].replace(/\+/g, ' ')); }
+  } catch(e) {}
+  if (initQ) {
+    $('q').value = initQ;
+    $('clear').style.display = 'block';
+    search(initQ);
+  } else {
+    home();
+  }
+})();
+</script>
+<%- include('partials/cr-shell-foot') %>

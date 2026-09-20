@@ -1,0 +1,557 @@
+<%
+// 辅助函数 - 兼容旧浏览器
+function formatFileSize(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (Math.round((bytes / 1024) * 10) / 10) + ' KB';
+  if (bytes < 1073741824) return (Math.round((bytes / 1048576) * 10) / 10) + ' MB';
+  return (Math.round((bytes / 1073741824) * 10) / 10) + ' GB';
+}
+
+function getFileIcon(filename) {
+  var ext = '';
+  var parts = filename.split('.');
+  if (parts.length > 1) {
+    ext = parts[parts.length - 1].toLowerCase();
+  }
+  var icons = {
+    'pdf': '[PDF]', 'doc': '[DOC]', 'docx': '[DOC]',
+    'xls': '[XLS]', 'xlsx': '[XLS]',
+    'ppt': '[PPT]', 'pptx': '[PPT]',
+    'jpg': '[IMG]', 'jpeg': '[IMG]', 'png': '[IMG]', 'gif': '[IMG]', 'bmp': '[IMG]',
+    'mp3': '[MP3]', 'wav': '[WAV]', 'flac': '[FLAC]',
+    'mp4': '[VID]', 'avi': '[VID]', 'mkv': '[VID]', 'mov': '[VID]',
+    'zip': '[ZIP]', 'rar': '[RAR]', '7z': '[7Z]', 'tar': '[TAR]',
+    'txt': '[TXT]', 'md': '[MD]', 'log': '[LOG]',
+    'js': '[JS]', 'html': '[HTML]', 'css': '[CSS]', 'py': '[PY]',
+    'exe': '[EXE]', 'msi': '[MSI]'
+  };
+  return icons[ext] || '[FILE]';
+}
+%>
+<%- include('partials/header-legacy') %>
+
+<div class="dashboard-container">
+  <div class="container">
+    <!-- 网盘容量进度条 -->
+    <%
+      var usedPct = Math.min(100, Math.round(usage.used / usage.quota * 1000) / 10);
+      var barColor = usedPct >= 95 ? '#e74c3c' : (usedPct >= 80 ? '#f39c12' : '#2f6fed');
+    %>
+    <div style="background:#fff; border:1px solid #c5dbf0; border-radius:6px; padding:12px 16px; margin-bottom:16px;">
+      <table style="width:100%; border-collapse:collapse;"><tr>
+        <td style="font-weight:bold; font-size:14px; color:#1f2d3d;">网盘容量</td>
+        <td style="text-align:right; font-size:12px; color:#4a5b6e;">已用 <b><%= formatFileSize(usage.used) %></b> / <%= formatFileSize(usage.quota) %>（<%= usedPct %>%）</td>
+      </tr></table>
+      <div style="width:100%; height:14px; background:#e3ebf3; border-radius:6px; overflow:hidden; margin-top:8px;">
+        <div style="width:<%= usedPct %>%; height:100%; background:<%= barColor %>;"></div>
+      </div>
+      <% if (usedPct >= 95) { %>
+        <p style="color:#e74c3c; font-size:12px; margin-top:6px;">[警告] 容量即将用尽，请及时清理文件</p>
+      <% } %>
+    </div>
+    <% if (typeof uploadError !== 'undefined' && uploadError) { %>
+      <div style="background:#fdecea; border:1px solid #f5c6cb; color:#c0392b; padding:10px 14px; border-radius:6px; margin-bottom:16px; font-size:13px;">[错误] <%= uploadError %></div>
+    <% } %>
+    <!-- 统计卡片 - table 布局 -->
+    <div class="stats-section">
+      <table class="stats-table"><tr>
+        <td>
+          <div class="stat-card stat-primary">
+            <div class="stat-icon">[目录]</div>
+            <div class="stat-info-text">
+              <span class="stat-value"><%= personalCount %></span>
+              <span class="stat-label">个人文件</span>
+            </div>
+            <div class="clearfix"></div>
+          </div>
+        </td>
+        <td>
+          <div class="stat-card stat-info">
+            <div class="stat-icon">[用户]</div>
+            <div class="stat-info-text">
+              <span class="stat-value"><%= currentUser ? currentUser.username : '' %></span>
+              <span class="stat-label">当前用户</span>
+            </div>
+            <div class="clearfix"></div>
+          </div>
+        </td>
+      </tr></table>
+    </div>
+
+    <!-- 上传区 -->
+    <div class="upload-section">
+      <div class="card">
+        <div class="card-header">
+          <h2>上传文件</h2>
+        </div>
+        <div class="card-body">
+          <form action="/upload" method="POST" enctype="multipart/form-data" class="upload-form">
+            <div class="upload-options">
+              <label class="radio-label">
+                <input type="radio" name="share" value="false" checked>
+                上传到个人文件夹
+              </label>
+            </div>
+            <input type="hidden" name="folderId" value="<%= currentFolderId || '' %>">
+            <div class="file-input-wrapper">
+              <input type="file" name="file" id="fileInput" required>
+              <div class="file-input-label">
+                <span id="fileName">选择文件</span>
+                <span class="file-hint" id="fileHint">支持单个文件，最大1GB</span>
+              </div>
+            </div>
+            <div class="upload-progress" style="display:none;">
+              <div class="progress-track"><div class="progress-bar"></div></div>
+              <div class="progress-info">
+                <span class="progress-pct">0%</span>
+                <span class="progress-speed">--</span>
+                <span class="progress-eta"></span>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary">上传</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- 文件列表区域 -->
+    <div class="files-section">
+      <!-- 个人文件 -->
+      <div class="card">
+        <div class="card-header">
+          <h2>我的文件：
+            <a href="/dashboard" style="color:inherit;">全部文件</a>
+            <% for (var fp = 0; fp < folderPath.length; fp++) { %>
+              <span style="color:#8a99ab;">&gt;</span>
+              <% if (folderPath[fp].id === currentFolderId) { %>
+                <span style="color:#2f6fed;"><%= folderPath[fp].name %></span>
+              <% } else { %>
+                <a href="/dashboard?folder=<%= folderPath[fp].id %>" style="color:inherit;"><%= folderPath[fp].name %></a>
+              <% } %>
+            <% } %>
+          </h2>
+          <span class="badge badge-primary"><%= folders.length + personalFiles.length %> 个项目</span>
+          <div class="clearfix"></div>
+        </div>
+        <div class="card-body">
+          <!-- 新建文件夹 -->
+          <form action="/folder/create" method="POST" style="margin-bottom:14px;">
+            <input type="hidden" name="parentId" value="<%= currentFolderId || '' %>">
+            <input type="text" name="name" placeholder="新建文件夹名称" required maxlength="60" style="padding:8px 12px; border:2px solid #c5dbf0; border-radius:6px; width:220px;">
+            <button type="submit" class="btn btn-primary btn-sm">[+] 新建文件夹</button>
+          </form>
+          <% if (folders.length === 0 && personalFiles.length === 0) { %>
+            <div class="empty-state">
+              <div class="empty-icon">[空]</div>
+              <p>还没有文件，新建一个文件夹或开始上传吧！</p>
+            </div>
+          <% } else { %>
+            <table class="file-table">
+              <thead>
+                <tr>
+                  <th>文件名</th>
+                  <th>大小</th>
+                  <th>上传时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% for (var fi = 0; fi < folders.length; fi++) { %>
+                  <% var folder = folders[fi]; %>
+                  <tr>
+                    <td class="file-name">
+                      <span class="file-icon">[目录]</span>
+                      <a href="/dashboard?folder=<%= folder.id %>"><%= folder.name %></a>
+                    </td>
+                    <td>--</td>
+                    <td><%= new Date(folder.created_at).toLocaleString() %></td>
+                    <td class="file-actions">
+                      <form action="/folder/<%= folder.id %>/delete" method="POST" style="display:inline;" onsubmit="return confirm('确定删除文件夹「<%= folder.name %>」？内部所有文件都会被永久删除！');">
+                        <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                      </form>
+                    </td>
+                  </tr>
+                <% } %>
+                <% for (var i = 0; i < personalFiles.length; i++) { %>
+                  <% var file = personalFiles[i]; %>
+                  <tr>
+                    <td class="file-name">
+                      <span class="file-icon"><%= getFileIcon(file.filename) %></span>
+                      <%= file.filename %>
+                    </td>
+                    <td><%= formatFileSize(file.file_size) %></td>
+                    <td><%= new Date(file.uploaded_at).toLocaleString() %></td>
+                    <td class="file-actions">
+                      <a href="/download/<%= file.id %>" class="btn btn-sm btn-outline">下载</a>
+                      <button type="button" class="btn btn-sm btn-outline" data-fid="<%= file.id %>" data-name="<%= file.filename %>" onclick="openShareModal(this.dataset.fid, this.dataset.name)"">分享</button>
+                      <form action="/delete/<%= file.id %>" method="POST" style="display:inline;" onsubmit="return confirm('确定要删除这个文件吗？');">
+                        <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                      </form>
+                    </td>
+                  </tr>
+                <% } %>
+              </tbody>
+            </table>
+          <% } %>
+        </div>
+      </div>
+
+    <!-- 团队区域 -->
+    <div class="card">
+      <div class="card-header">
+        <h2>[团队] 团队空间</h2>
+        <span class="badge">我的UID: <%= currentUser.uid %></span>
+        <div class="clearfix"></div>
+      </div>
+      <div class="card-body">
+        <% if (typeof teamSuccess !== 'undefined' && teamSuccess) { %>
+          <div class="alert" style="background:#dcfce7; color:#166534; border:1px solid #86efac;"><%= teamSuccess %></div>
+        <% } %>
+        <% if (typeof teamError !== 'undefined' && teamError) { %>
+          <div class="alert" style="background:#fee2e2; color:#991b1b; border:1px solid #fca5a5;"><%= teamError %></div>
+        <% } %>
+
+        <% if (!hasTeam) { %>
+          <p style="color: #6b7c93; margin-bottom: 15px;">您还未加入任何团队。创建团队或输入团队长的UID加入已有团队。</p>
+          <table style="width:100%;"><tr>
+            <td style="width:50%; vertical-align:top; padding-right:10px;">
+              <p style="font-weight:bold; margin-bottom:8px;">[创建] 创建团队</p>
+              <form action="/team/create" method="POST">
+                <div class="form-group" style="margin-bottom:10px;">
+                  <input type="text" name="name" placeholder="团队名称" required style="width:100%; padding:10px 14px; border:2px solid #c5dbf0; font-size:14px;">
+                </div>
+                <button type="submit" class="btn btn-primary">创建团队</button>
+              </form>
+            </td>
+            <td style="width:50%; vertical-align:top; padding-left:10px;">
+              <p style="font-weight:bold; margin-bottom:8px;">[加入] 加入团队</p>
+              <form action="/team/join" method="POST">
+                <div class="form-group" style="margin-bottom:10px;">
+                  <input type="text" name="ownerUid" placeholder="团队长的UID" required style="width:100%; padding:10px 14px; border:2px solid #c5dbf0; font-size:14px;">
+                </div>
+                <button type="submit" class="btn btn-primary">加入团队</button>
+              </form>
+            </td>
+          </tr></table>
+        <% } else { %>
+          <% teams.forEach(function(team) { %>
+            <div style="border:1px solid #c5dbf0; padding:15px; margin-bottom:15px; background:#f8fbff;">
+              <p style="font-weight:bold; margin-bottom:8px;">[目录] <%= team.name %>
+                <% if (team.isOwner) { %>
+                  <span class="badge" style="margin-left:8px;">我是团队长</span>
+                <% } %>
+              </p>
+              <p style="color:#6b7c93; font-size:13px; margin-bottom:12px;">团队长: <%= team.owner_name %> (UID: <%= team.owner_uid %>)</p>
+
+              <form action="/team/<%= team.id %>/upload" method="POST" enctype="multipart/form-data" style="margin-bottom:12px;">
+                <div style="margin-bottom:10px;">
+                  <input type="file" name="file" required>
+                </div>
+                <div class="upload-progress" style="display:none;">
+                  <div class="progress-track"><div class="progress-bar"></div></div>
+                  <div class="progress-info">
+                    <span class="progress-pct">0%</span>
+                    <span class="progress-speed">--</span>
+                    <span class="progress-eta"></span>
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-primary">上传到团队</button>
+              </form>
+
+              <% if (team.files.length === 0) { %>
+                <p style="color:#6b7c93; padding:8px 0;">团队文件夹暂无文件</p>
+              <% } else { %>
+                <table class="file-table" style="width:100%;">
+                  <thead>
+                    <tr>
+                      <th style="text-align:left;">文件名</th>
+                      <th>上传者</th>
+                      <th>大小</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% team.files.forEach(function(file) { %>
+                      <tr>
+                        <td><%= getFileIcon(file.filename) %> <%= file.filename %></td>
+                        <td><%= file.uploader_name %></td>
+                        <td><%= formatFileSize(file.file_size) %></td>
+                        <td>
+                          <a href="/team/<%= team.id %>/download/<%= file.id %>" class="btn btn-sm btn-outline">下载</a>
+                          <% if (file.user_id === currentUser.id) { %>
+                            <button type="button" class="btn btn-sm btn-outline" data-fid="<%= file.id %>" data-name="<%= file.filename %>" onclick="openShareModal(this.dataset.fid, this.dataset.name)"">分享</button>
+                          <% } %>
+                          <form action="/delete/<%= file.id %>" method="POST" style="display:inline;" onsubmit="return confirm('确定删除该团队文件？');">
+                            <button type="submit" class="btn btn-sm btn-danger">删除</button>
+                          </form>
+                        </td>
+                      </tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+              <% } %>
+
+              <% if (team.isOwner) { %>
+                <div style="margin-top:12px; padding-top:12px; border-top:1px solid #e2e8f0;">
+                  <p style="font-weight:bold; margin-bottom:8px;">[团员] 团员管理</p>
+                  <form action="/team/<%= team.id %>/add-member" method="POST" style="margin-bottom:12px;">
+                    <div class="form-group" style="margin-bottom:8px;">
+                      <input type="text" name="targetUid" placeholder="输入用户UID添加团员" required style="width:100%; padding:8px 12px; border:2px solid #c5dbf0; font-size:14px;">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">添加团员</button>
+                  </form>
+                  <table style="width:100%;">
+                    <thead>
+                      <tr>
+                        <th style="text-align:left; padding:4px;">用户名</th>
+                        <th style="text-align:left; padding:4px;">UID</th>
+                        <th style="text-align:left; padding:4px;">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <% team.members.forEach(function(m) { %>
+                        <tr>
+                          <td style="padding:4px;"><%= m.username %><% if (m.uid === team.owner_uid) { %> [团队长]<% } %></td>
+                          <td style="padding:4px; font-family:monospace;"><%= m.uid %></td>
+                          <td style="padding:4px;">
+                            <% if (m.uid !== team.owner_uid) { %>
+                              <form action="/team/<%= team.id %>/remove-member" method="POST" style="display:inline;" onsubmit="return confirm('确定移除团员？');">
+                                <input type="hidden" name="memberUserId" value="<%= m.id %>">
+                                <button type="submit" class="btn btn-sm btn-danger">移除</button>
+                              </form>
+                            <% } else { %>
+                              <span style="color:#6b7c93;">-</span>
+                            <% } %>
+                          </td>
+                        </tr>
+                      <% }) %>
+                    </tbody>
+                  </table>
+                </div>
+              <% } %>
+
+              <div style="margin-top:12px; padding-top:12px; border-top:1px solid #e2e8f0;">
+                <form action="/team/<%= team.id %>/leave" method="POST" onsubmit="return confirm('确定退出该团队？');">
+                  <button type="submit" class="btn btn-sm btn-outline">退出团队</button>
+                </form>
+              </div>
+
+              <% if (team.isOwner) { %>
+                <div style="margin-top:12px; padding-top:12px; border-top:1px solid #fed7d7;">
+                  <p style="color:#c53030; font-size:13px; margin-bottom:8px;">[警告] 解散团队将永久删除所有团队文件和成员关系，不可恢复。</p>
+                  <button type="button" class="btn btn-danger btn-sm" onclick="document.getElementById('dissolveLegacy_<%= team.id %>').style.display='block'">解散团队</button>
+                  <div id="dissolveLegacy_<%= team.id %>" style="display:none; margin-top:10px; padding:12px; border:1px solid #fed7d7; background:#fff5f5;">
+                    <form action="/team/<%= team.id %>/dissolve" method="POST" onsubmit="return confirm('确定解散团队？所有文件将被永久删除！');">
+                      <div class="form-group" style="margin-bottom:8px;">
+                        <input type="password" name="password" required placeholder="请输入您的账户密码" style="width:100%; padding:8px 12px; border:2px solid #fed7d7; font-size:14px;">
+                      </div>
+                      <button type="submit" class="btn btn-danger btn-sm">确认解散</button>
+                      <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('dissolveLegacy_<%= team.id %>').style.display='none'">取消</button>
+                    </form>
+                  </div>
+                </div>
+              <% } %>
+            </div>
+          <% }) %>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- 危险操作区 -->
+    <div class="card">
+      <div class="card-header">
+        <h2>账户管理</h2>
+        <div class="clearfix"></div>
+      </div>
+      <div class="card-body">
+        <% if (typeof passwordSuccess !== 'undefined' && passwordSuccess) { %>
+          <div class="alert" style="background-color:#e6f4ea; color:#1e5631; border:1px solid #b6d7c1;"><%= passwordSuccess %></div>
+        <% } %>
+        <% if (typeof passwordError !== 'undefined' && passwordError) { %>
+          <div class="alert" style="background-color:#fdeaea; color:#c53030; border:1px solid #f0c5c5;"><%= passwordError %></div>
+        <% } %>
+        <% if (typeof deleteError !== 'undefined' && deleteError) { %>
+          <div class="alert"><%= deleteError %></div>
+        <% } %>
+
+        <!-- 修改密码区 -->
+        <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0;">
+          <p style="font-weight: bold; margin-bottom: 8px; color: #2d374d; font-size: 15px;">[密码] 修改密码</p>
+          <p style="color: #6b7c93; margin-bottom: 15px; font-size: 13px;">修改密码需验证原密码，保障账户安全。</p>
+          <button type="button" class="btn btn-primary" onclick="togglePasswordForm()">修改密码</button>
+
+          <!-- 修改密码表单（默认隐藏） -->
+          <div id="passwordFormArea" style="display:none; margin-top: 20px; border: 1px solid #c5dbf0; padding: 20px; background-color: #f8fbff;">
+            <p style="color: #2d5cf5; font-weight: bold; margin-bottom: 12px;">修改账户密码</p>
+            <p style="color: #6b7c93; margin-bottom: 15px; font-size: 13px;">请填写以下信息以修改密码：</p>
+            <form action="/account/password" method="POST">
+              <div class="form-group" style="margin-bottom: 15px;">
+                <label style="display:block; margin-bottom: 6px; color: #2d374d; font-size: 13px;">原密码</label>
+                <input type="password" name="oldPassword" required placeholder="请输入原密码" style="width:100%; padding:10px 14px; border:2px solid #c5dbf0; font-size:14px;">
+              </div>
+              <div class="form-group" style="margin-bottom: 15px;">
+                <label style="display:block; margin-bottom: 6px; color: #2d374d; font-size: 13px;">新密码</label>
+                <input type="password" name="newPassword" required placeholder="至少6位字符" style="width:100%; padding:10px 14px; border:2px solid #c5dbf0; font-size:14px;">
+              </div>
+              <div class="form-group" style="margin-bottom: 15px;">
+                <label style="display:block; margin-bottom: 6px; color: #2d374d; font-size: 13px;">确认新密码</label>
+                <input type="password" name="confirmPassword" required placeholder="再次输入新密码" style="width:100%; padding:10px 14px; border:2px solid #c5dbf0; font-size:14px;">
+              </div>
+              <button type="submit" class="btn btn-primary">确认修改</button>
+              <button type="button" class="btn btn-outline" onclick="togglePasswordForm()">取消</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- 注销账户区 -->
+        <p style="font-weight: bold; margin-bottom: 8px; color: #c53030; font-size: 15px;">[删除] 注销账户</p>
+        <p style="color: #6b7c93; margin-bottom: 15px;">注销账户将永久删除您的账户、所有个人文件和共享文件，此操作不可恢复。</p>
+        <button type="button" class="btn btn-danger" id="deleteAccountBtn" onclick="toggleDeleteForm()">注销账户</button>
+
+        <!-- 注销确认表单（默认隐藏） -->
+        <div id="deleteFormArea" style="display:none; margin-top: 20px; border: 1px solid #c5dbf0; padding: 20px; background-color: #f8fbff;">
+          <p style="color: #c53030; font-weight: bold; margin-bottom: 12px;">确认注销账户</p>
+          <p style="color: #6b7c93; margin-bottom: 15px; font-size: 13px;">请输入密码以确认注销操作：</p>
+          <form action="/account/delete" method="POST">
+            <div class="form-group" style="margin-bottom: 15px;">
+              <input type="password" name="password" required placeholder="请输入您的密码" style="width:100%; padding:10px 14px; border:2px solid #c5dbf0; font-size:14px;">
+            </div>
+            <button type="submit" class="btn btn-danger">确认注销</button>
+            <button type="button" class="btn btn-outline" onclick="toggleDeleteForm()">取消</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 分享链接弹窗（旧浏览器兼容） -->
+<div id="shareModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:10000; justify-content:center; align-items:center;">
+  <div style="background:white; padding:24px; border-radius:8px; width:460px; max-width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <h3 style="color:#2d5cf5; margin-bottom:8px;">分享文件</h3>
+    <p id="shareFileName" style="color:#6b7c93; margin-bottom:12px; word-break:break-all; font-size:13px;"></p>
+    <p style="color:#6b7c93; font-size:12px; margin-bottom:8px;">任何人获得此链接和<b style="color:#c53030;">4位数字密码</b>即可<b style="color:#c53030;">无需登录</b>直接下载：</p>
+    <input type="text" id="shareLinkInput" readonly style="width:100%; padding:10px 12px; border:2px solid #c5dbf0; font-size:13px; color:#2d374d; background:#f7fafc; box-sizing:border-box;" onfocus="this.select()">
+    <div style="margin-top:8px; display:flex; align-items:center;">
+      <span style="color:#6b7c93; font-size:12px; white-space:nowrap; margin-right:6px;">访问密码:</span>
+      <input type="text" id="sharePwdInput" readonly value="----" style="width:90px; padding:8px 10px; border:2px solid #f6c453; font-size:15px; letter-spacing:3px; text-align:center; color:#b7791f; background:#fffaf0; font-weight:bold; box-sizing:border-box;" onfocus="this.select()">
+      <button type="button" class="btn btn-outline" onclick="copySharePwd()" style="margin-left:6px;">复制密码</button>
+    </div>
+    <div id="shareStatus" style="margin:10px 0; font-size:12px;"></div>
+    <div style="margin-top:12px;">
+      <button type="button" class="btn btn-primary" onclick="copyShareLink()">复制</button>
+      <button type="button" class="btn btn-danger" onclick="revokeShare()">撤销分享</button>
+      <button type="button" class="btn btn-outline" onclick="closeShareModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleDeleteForm() {
+  var area = document.getElementById('deleteFormArea');
+  if (area.style.display === 'none' || area.style.display === '') {
+    area.style.display = 'block';
+  } else {
+    area.style.display = 'none';
+  }
+}
+
+function togglePasswordForm() {
+  var area = document.getElementById('passwordFormArea');
+  if (area.style.display === 'none' || area.style.display === '') {
+    area.style.display = 'block';
+  } else {
+    area.style.display = 'none';
+  }
+}
+
+// ===== 分享链接（兼容旧浏览器） =====
+var shareModal = document.getElementById('shareModal');
+var currentShareFileId = null;
+
+function openShareModal(fileId, fileName) {
+  currentShareFileId = fileId;
+  document.getElementById('shareFileName').innerHTML = '';
+  document.getElementById('shareFileName').appendChild(document.createTextNode(fileName || ''));
+  document.getElementById('shareLinkInput').value = '正在生成链接...';
+  document.getElementById('sharePwdInput').value = '----';
+  document.getElementById('shareStatus').innerHTML = '';
+  shareModal.style.display = 'flex';
+
+  if (typeof fetch === 'undefined') {
+    document.getElementById('shareStatus').innerHTML = '<span style="color:#c53030;">[失败] 当前浏览器不支持，请升级浏览器</span>';
+    return;
+  }
+  fetch('/share/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileId: fileId })
+  }).then(function(resp) {
+    if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.error || '生成失败'); });
+    return resp.json();
+  }).then(function(data) {
+    document.getElementById('shareLinkInput').value = window.location.origin + data.url;
+    document.getElementById('sharePwdInput').value = data.password || '----';
+  }).catch(function(err) {
+    document.getElementById('shareStatus').innerHTML = '<span style="color:#c53030;">[失败] ' + err.message + '</span>';
+    document.getElementById('shareLinkInput').value = '';
+  });
+}
+
+function closeShareModal() {
+  shareModal.style.display = 'none';
+  currentShareFileId = null;
+}
+
+function copyShareLink() {
+  var input = document.getElementById('shareLinkInput');
+  if (!input.value || input.value.indexOf('http') !== 0) return;
+  input.select();
+  try {
+    document.execCommand('copy');
+    document.getElementById('shareStatus').innerHTML = '<span style="color:#2f855a;">[成功] 链接已复制（请连同下方密码一起发给对方）</span>';
+  } catch (e) {
+    document.getElementById('shareStatus').innerHTML = '<span style="color:#6b7c93;">请手动复制链接</span>';
+  }
+}
+
+function copySharePwd() {
+  var input = document.getElementById('sharePwdInput');
+  if (!input.value || input.value === '----') return;
+  input.select();
+  try {
+    document.execCommand('copy');
+    document.getElementById('shareStatus').innerHTML = '<span style="color:#2f855a;">[成功] 密码已复制</span>';
+  } catch (e) {
+    document.getElementById('shareStatus').innerHTML = '<span style="color:#6b7c93;">请手动复制密码</span>';
+  }
+}
+
+function revokeShare() {
+  if (!currentShareFileId) return;
+  if (!confirm('确定撤销该文件的分享链接？撤销后链接立即失效。')) return;
+  fetch('/share/revoke', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileId: currentShareFileId })
+  }).then(function(resp) {
+    if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.error || '撤销失败'); });
+    return resp.json();
+  }).then(function() {
+    document.getElementById('shareLinkInput').value = '';
+    document.getElementById('sharePwdInput').value = '----';
+    document.getElementById('shareStatus').innerHTML = '<span style="color:#2f855a;">[成功] 分享已撤销，链接已失效</span>';
+  }).catch(function(err) {
+    document.getElementById('shareStatus').innerHTML = '<span style="color:#c53030;">[失败] ' + err.message + '</span>';
+  });
+}
+
+if (shareModal) {
+  shareModal.addEventListener('click', function(e) {
+    if (e.target === shareModal) closeShareModal();
+  });
+}
+</script>
+<script src="/js/app-legacy-20260828.js"></script>
+<%- include('partials/footer-legacy') %>
